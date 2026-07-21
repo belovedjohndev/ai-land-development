@@ -1,19 +1,22 @@
 {
   "name": "ai-land-development",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run build -w @ald/domain && concurrently -n API,WEB -c auto \"npm run dev -w @ald/api\" \"npm run dev -w @ald/web\"",
+    "dev": "npm run build -w @ald/domain && npm run build -w @ald/database && concurrently -n API,WEB -c auto \"npm run dev -w @ald/api\" \"npm run dev -w @ald/web\"",
     "build": "npm run build -w @ald/domain && npm run build -w @ald/database && npm run build -w @ald/api && npm run build -w @ald/web",
-    "test": "npm run test -w @ald/domain && npm run test -w @ald/api",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run build -w @ald/domain && npm run build -w @ald/database && npm run test -w @ald/domain && npm run test -w @ald/api",
+    "typecheck": "npm run build -w @ald/domain && npm run build -w @ald/database && npm run typecheck --workspaces --if-present",
+    "format": "prettier --write .",
     "format:check": "prettier --check .",
     "db:generate": "npm run db:generate -w @ald/database",
-    "db:migrate": "npm run db:migrate -w @ald/database"
+    "db:migrate": "npm run db:migrate -w @ald/database",
+    "db:seed": "npm run db:seed -w @ald/database",
+    "db:setup": "npm run db:migrate && npm run db:seed"
   },
   "devDependencies": {
     "concurrently": "^9.2.0",

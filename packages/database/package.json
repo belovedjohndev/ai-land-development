@@ -1,18 +1,30 @@
 {
   "name": "@ald/database",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "tsx src/migrate.ts",
+    "db:seed": "tsx src/seed.ts"
   },
   "dependencies": {
-    "drizzle-orm": "^0.44.2",
+    "dotenv": "^16.6.1",
+    "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.7"
   },
-  "devDependencies": { "drizzle-kit": "^0.31.4", "@types/node": "^22.15.30" }
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "drizzle-kit": "^0.31.4",
+    "tsx": "^4.20.3"
+  }
 }

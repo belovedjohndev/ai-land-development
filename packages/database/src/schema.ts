@@ -45,6 +45,11 @@ export const authenticationAuditEventType = pgEnum(
   "authentication_audit_event_type",
   ["sign_in_succeeded", "sign_in_failed", "signed_out", "session_expired"],
 );
+export const documentMimeType = pgEnum("document_mime_type", [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+]);
 
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -204,34 +209,166 @@ export const applications = pgTable(
   ],
 );
 
-export const documents = pgTable(
-  "documents",
+export const documentCategories = pgTable(
+  "document_categories",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     tenantId: uuid("tenant_id")
       .notNull()
       .references(() => tenants.id),
-    applicationId: uuid("application_id").notNull(),
+    code: text("code").notNull(),
     name: text("name").notNull(),
-    storageKey: text("storage_key").notNull(),
-    mimeType: text("mime_type").notNull(),
-    sizeBytes: integer("size_bytes").notNull().default(0),
-    version: integer("version").notNull().default(1),
-    uploadedAt: timestamp("uploaded_at", { withTimezone: true })
+    checklistItemCode: text("checklist_item_code").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("document_categories_tenant_code_uq").on(
+      table.tenantId,
+      table.code,
+    ),
+    uniqueIndex("document_categories_tenant_id_id_uq").on(
+      table.tenantId,
+      table.id,
+    ),
+    check(
+      "document_categories_code_ck",
+      sql`${table.code} ~ '^[a-z][a-z0-9_]{1,63}$'`,
+    ),
+    check(
+      "document_categories_checklist_code_ck",
+      sql`${table.checklistItemCode} ~ '^[a-z][a-z0-9_]{1,63}$'`,
+    ),
+    check(
+      "document_categories_name_ck",
+      sql`length(trim(${table.name})) BETWEEN 1 AND 120`,
+    ),
+  ],
+);
+
+export const documents = pgTable(
+  "documents",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull(),
+    applicationId: uuid("application_id").notNull(),
+    categoryId: uuid("category_id").notNull(),
+    currentVersion: integer("current_version").notNull().default(1),
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    archivedBy: uuid("archived_by"),
   },
   (table) => [
     index("documents_tenant_application_idx").on(
       table.tenantId,
       table.applicationId,
     ),
-    check("documents_size_bytes_ck", sql`${table.sizeBytes} >= 0`),
-    check("documents_version_ck", sql`${table.version} >= 1`),
+    uniqueIndex("documents_tenant_id_id_uq").on(table.tenantId, table.id),
+    check("documents_current_version_ck", sql`${table.currentVersion} >= 1`),
+    check(
+      "documents_archive_actor_ck",
+      sql`(${table.archivedAt} IS NULL AND ${table.archivedBy} IS NULL) OR (${table.archivedAt} IS NOT NULL AND ${table.archivedBy} IS NOT NULL)`,
+    ),
     foreignKey({
       name: "documents_application_tenant_fk",
       columns: [table.tenantId, table.applicationId],
       foreignColumns: [applications.tenantId, applications.id],
+    }),
+    foreignKey({
+      name: "documents_category_tenant_fk",
+      columns: [table.tenantId, table.categoryId],
+      foreignColumns: [documentCategories.tenantId, documentCategories.id],
+    }),
+    foreignKey({
+      name: "documents_created_by_tenant_fk",
+      columns: [table.tenantId, table.createdBy],
+      foreignColumns: [users.tenantId, users.id],
+    }),
+    foreignKey({
+      name: "documents_archived_by_tenant_fk",
+      columns: [table.tenantId, table.archivedBy],
+      foreignColumns: [users.tenantId, users.id],
+    }),
+  ],
+);
+
+// Migration 0003 adds the deferred documents -> document_versions composite
+// foreign key explicitly. Declaring both directions here creates circular type
+// inference in Drizzle; the database remains the source of enforcement.
+export const documentVersions = pgTable(
+  "document_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull(),
+    documentId: uuid("document_id").notNull(),
+    version: integer("version").notNull(),
+    filename: text("filename").notNull(),
+    objectKey: text("object_key").notNull(),
+    mimeType: documentMimeType("mime_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    sha256Digest: char("sha256_digest", { length: 64 }).notNull(),
+    uploadedBy: uuid("uploaded_by"),
+    idempotencyKey: uuid("idempotency_key"),
+    requestFingerprint: char("request_fingerprint", { length: 64 }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("document_versions_tenant_document_version_uq").on(
+      table.tenantId,
+      table.documentId,
+      table.version,
+    ),
+    uniqueIndex("document_versions_tenant_document_id_uq").on(
+      table.tenantId,
+      table.documentId,
+      table.id,
+    ),
+    uniqueIndex("document_versions_object_key_uq").on(table.objectKey),
+    uniqueIndex("document_versions_idempotency_uq")
+      .on(table.tenantId, table.uploadedBy, table.idempotencyKey)
+      .where(sql`${table.idempotencyKey} IS NOT NULL`),
+    index("document_versions_tenant_document_created_idx").on(
+      table.tenantId,
+      table.documentId,
+      table.createdAt,
+    ),
+    check("document_versions_version_ck", sql`${table.version} >= 1`),
+    check(
+      "document_versions_filename_ck",
+      sql`length(${table.filename}) BETWEEN 1 AND 120`,
+    ),
+    check(
+      "document_versions_size_bytes_ck",
+      sql`${table.sizeBytes} BETWEEN 1 AND 10485760`,
+    ),
+    check(
+      "document_versions_sha256_ck",
+      sql`${table.sha256Digest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "document_versions_idempotency_pair_ck",
+      sql`(${table.idempotencyKey} IS NULL AND ${table.requestFingerprint} IS NULL) OR (${table.idempotencyKey} IS NOT NULL AND ${table.requestFingerprint} IS NOT NULL)`,
+    ),
+    check(
+      "document_versions_request_fingerprint_ck",
+      sql`${table.requestFingerprint} IS NULL OR ${table.requestFingerprint} ~ '^[0-9a-f]{64}$'`,
+    ),
+    foreignKey({
+      name: "document_versions_document_tenant_fk",
+      columns: [table.tenantId, table.documentId],
+      foreignColumns: [documents.tenantId, documents.id],
+    }),
+    foreignKey({
+      name: "document_versions_uploader_tenant_fk",
+      columns: [table.tenantId, table.uploadedBy],
+      foreignColumns: [users.tenantId, users.id],
     }),
   ],
 );

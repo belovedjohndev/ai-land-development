@@ -3,6 +3,7 @@ import {
   auditEvents,
   decisions,
   documents,
+  documentVersions,
   findings,
   users,
   type Database,
@@ -13,7 +14,7 @@ import {
   type ApplicationStatus,
   type ReviewDecision,
 } from "@ald/domain";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { RepositoryError } from "../errors.js";
 import type {
   ApplicationRepository,
@@ -234,18 +235,27 @@ export class PostgresApplicationRepository implements ApplicationRepository {
       this.db
         .select({
           applicationId: documents.applicationId,
-          name: documents.name,
-          sizeBytes: documents.sizeBytes,
-          version: documents.version,
+          name: documentVersions.filename,
+          sizeBytes: documentVersions.sizeBytes,
+          version: documentVersions.version,
         })
         .from(documents)
+        .innerJoin(
+          documentVersions,
+          and(
+            eq(documentVersions.tenantId, documents.tenantId),
+            eq(documentVersions.documentId, documents.id),
+            eq(documentVersions.version, documents.currentVersion),
+          ),
+        )
         .where(
           and(
             eq(documents.tenantId, tenantId),
             inArray(documents.applicationId, ids),
+            isNull(documents.archivedAt),
           ),
         )
-        .orderBy(documents.uploadedAt),
+        .orderBy(documentVersions.createdAt),
       this.db
         .select({
           id: auditEvents.id,

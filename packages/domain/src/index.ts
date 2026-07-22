@@ -20,6 +20,10 @@ export type UserRole = z.infer<typeof UserRoleSchema>;
 export const applicationPermissions = [
   "applications:read",
   "decisions:submit",
+  "documents:read",
+  "documents:download",
+  "documents:upload",
+  "documents:archive",
 ] as const;
 export const ApplicationPermissionSchema = z.enum(applicationPermissions);
 export type ApplicationPermission = z.infer<typeof ApplicationPermissionSchema>;
@@ -27,7 +31,11 @@ export type ApplicationPermission = z.infer<typeof ApplicationPermissionSchema>;
 const rolePermissions: Record<UserRole, ReadonlySet<ApplicationPermission>> = {
   admin: new Set(applicationPermissions),
   reviewer: new Set(applicationPermissions),
-  viewer: new Set(["applications:read"]),
+  viewer: new Set([
+    "applications:read",
+    "documents:read",
+    "documents:download",
+  ]),
 };
 
 export function roleCan(
@@ -35,6 +43,62 @@ export function roleCan(
   permission: ApplicationPermission,
 ): boolean {
   return rolePermissions[role].has(permission);
+}
+
+export const documentMimeTypes = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+] as const;
+export const DocumentMimeTypeSchema = z.enum(documentMimeTypes);
+export type DocumentMimeType = z.infer<typeof DocumentMimeTypeSchema>;
+
+export const maxDocumentSizeBytes = 10 * 1024 * 1024;
+
+export const DocumentFileMetadataSchema = z.object({
+  mimeType: DocumentMimeTypeSchema,
+  sizeBytes: z.number().int().min(1).max(maxDocumentSizeBytes),
+});
+export type DocumentFileMetadata = z.infer<typeof DocumentFileMetadataSchema>;
+
+export const DocumentVersionSchema = z.number().int().min(1);
+
+const canonicalExtension: Record<DocumentMimeType, string> = {
+  "application/pdf": ".pdf",
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+};
+
+export function normalizeDocumentFilename(
+  originalFilename: string,
+  mimeType: DocumentMimeType,
+): string {
+  const pathFreeName = originalFilename.replaceAll("\\", "/").split("/").at(-1);
+  const extensionIndex = pathFreeName?.lastIndexOf(".") ?? -1;
+  const basename = (
+    extensionIndex > 0 ? pathFreeName?.slice(0, extensionIndex) : pathFreeName
+  )
+    ?.normalize("NFKC")
+    .replace(/[\p{Cc}\p{Cf}]/gu, "")
+    .toLocaleLowerCase("en-US")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+  const extension = canonicalExtension[mimeType];
+  const maximumBasenameLength = 120 - extension.length;
+  const safeBasename = Array.from(basename || "document")
+    .slice(0, maximumBasenameLength)
+    .join("")
+    .replace(/-+$/g, "");
+
+  return `${safeBasename || "document"}${extension}`;
+}
+
+export function nextDocumentVersion(currentVersion: number): number {
+  return DocumentVersionSchema.parse(currentVersion) + 1;
+}
+
+export function canUseDocument(isArchived: boolean): boolean {
+  return !isArchived;
 }
 
 export const decisionActions = [

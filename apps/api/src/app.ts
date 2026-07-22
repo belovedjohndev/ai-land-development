@@ -1,5 +1,6 @@
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
+import multipart from "@fastify/multipart";
 import {
   ReviewDecisionSchema,
   roleCan,
@@ -9,6 +10,13 @@ import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { z } from "zod";
 import { AuthenticatedRequestContextResolver } from "./authentication/authenticated-request-context.js";
 import { AuthenticationService } from "./authentication/authentication-service.js";
+import type { DocumentRepository } from "./documents/document-repository.js";
+import {
+  documentMultipartLimits,
+  registerDocumentRoutes,
+} from "./documents/document-routes.js";
+import { DocumentService } from "./documents/document-service.js";
+import type { ObjectStorage } from "./documents/object-storage.js";
 import { RepositoryError } from "./errors.js";
 import type {
   ApplicationRepository,
@@ -27,6 +35,9 @@ type BuildAppOptions = {
   repository: ApplicationRepository;
   sessionRepository: SessionRepository;
   passwordHasher: PasswordHasher;
+  documentRepository: DocumentRepository;
+  objectStorage: ObjectStorage;
+  documentDownloadTtlSeconds: number;
   sessionTtlMs: number;
   secureCookies: boolean;
   logger?: boolean;
@@ -36,11 +47,21 @@ export async function buildApp({
   repository,
   sessionRepository,
   passwordHasher,
+  documentRepository,
+  objectStorage,
+  documentDownloadTtlSeconds,
   sessionTtlMs,
   secureCookies,
   logger = true,
 }: BuildAppOptions) {
   const app = Fastify({ logger });
+  app.setErrorHandler((error, request, reply) => {
+    request.log.error(
+      { errorName: error instanceof Error ? error.name : "UnknownError" },
+      "Unhandled request processing failure.",
+    );
+    return reply.code(500).send({ message: "Internal server error." });
+  });
   const authentication = new AuthenticationService(
     sessionRepository,
     passwordHasher,
@@ -53,8 +74,10 @@ export async function buildApp({
   await app.register(cors, {
     origin: process.env.WEB_ORIGIN ?? "http://localhost:5173",
     credentials: true,
+    methods: ["GET", "HEAD", "POST", "DELETE"],
   });
   await app.register(cookie);
+  await app.register(multipart, { limits: documentMultipartLimits() });
 
   app.get("/health", async () => ({
     status: "ok",
@@ -132,6 +155,16 @@ export async function buildApp({
     }
     return context;
   }
+
+  registerDocumentRoutes(app, {
+    repository: documentRepository,
+    service: new DocumentService(
+      documentRepository,
+      objectStorage,
+      documentDownloadTtlSeconds,
+    ),
+    requirePermission,
+  });
 
   app.get("/api/applications", async (request, reply) => {
     const context = await requirePermission(

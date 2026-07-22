@@ -4,7 +4,6 @@ import {
   Building2,
   CheckCircle2,
   ClipboardCheck,
-  FileText,
   Gauge,
   MapPinned,
   ShieldCheck,
@@ -16,6 +15,7 @@ import {
   type SessionView,
 } from "./auth";
 import { AuthenticatedShell } from "./AuthenticatedShell";
+import { DocumentManager } from "./DocumentManager";
 import { SignInScreen } from "./SignInScreen";
 
 type Finding = {
@@ -243,6 +243,8 @@ export default function App() {
           setOverride={setOverride}
           decide={decide}
           canDecide={session.user.role !== "viewer"}
+          role={session.user.role}
+          onAuthenticationRequired={expireSession}
           message={message}
           close={() => setSelected(null)}
         />
@@ -404,6 +406,8 @@ function ApplicationWorkspace({
   setOverride,
   decide,
   canDecide,
+  role,
+  onAuthenticationRequired,
   message,
   close,
 }: {
@@ -414,6 +418,8 @@ function ApplicationWorkspace({
   setOverride: (v: string) => void;
   decide: (a: "approve" | "request_revision" | "reject" | "override") => void;
   canDecide: boolean;
+  role: SessionView["user"]["role"];
+  onAuthenticationRequired: () => void;
   message: string;
   close: () => void;
 }) {
@@ -621,29 +627,11 @@ function ApplicationWorkspace({
               </div>
             </section>
           )}
-          <section className="card documents">
-            <div className="card-head">
-              <div>
-                <h2>Documents</h2>
-                <p>Versioned submission evidence</p>
-              </div>
-            </div>
-            {item.documents.length ? (
-              item.documents.map((d) => (
-                <div className="doc" key={d.name}>
-                  <FileText />
-                  <div>
-                    <strong>{d.name}</strong>
-                    <span>{d.meta}</span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="empty small-empty">
-                No document metadata in the demo record.
-              </div>
-            )}
-          </section>
+          <DocumentManager
+            applicationId={item.id}
+            role={role}
+            onAuthenticationRequired={onAuthenticationRequired}
+          />
         </aside>
       </section>
     </>

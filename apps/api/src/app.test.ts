@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import type { UserRole } from "@ald/domain";
 import { describe, expect, it, vi } from "vitest";
 import { buildApp } from "./app.js";
+import type { DocumentRepository } from "./documents/document-repository.js";
+import type { ObjectStorage } from "./documents/object-storage.js";
 import type {
   ApplicationRepository,
   ApplicationView,
@@ -86,8 +88,28 @@ async function createHarness(options: HarnessOptions = {}) {
     revokeSession: vi.fn(async () => undefined),
     recordFailedSignIn: vi.fn(async () => undefined),
   };
+  const documentRepository: DocumentRepository = {
+    listCategories: vi.fn(async () => []),
+    validateCreateTarget: vi.fn(async () => "valid" as const),
+    validateReplacementTarget: vi.fn(async () => "valid" as const),
+    listDocuments: vi.fn(async () => []),
+    findUploadByIdempotency: vi.fn(async () => null),
+    createDocument: vi.fn(),
+    replaceDocument: vi.fn(),
+    findVersionForDownload: vi.fn(async () => null),
+    recordDownload: vi.fn(async () => undefined),
+    archiveDocument: vi.fn(async () => "missing" as const),
+  };
+  const objectStorage: ObjectStorage = {
+    putObject: vi.fn(async () => undefined),
+    deleteObject: vi.fn(async () => undefined),
+    createSignedDownload: vi.fn(),
+  };
   const app = await buildApp({
     repository,
+    documentRepository,
+    objectStorage,
+    documentDownloadTtlSeconds: 60,
     passwordHasher,
     sessionRepository,
     sessionTtlMs: 12 * 60 * 60 * 1_000,
@@ -103,6 +125,27 @@ function digest(value: string): string {
 }
 
 describe("authentication API", () => {
+  it("allows browser preflight for document archival", async () => {
+    const { app } = await createHarness();
+    const response = await app.inject({
+      method: "OPTIONS",
+      url: `/api/applications/${application.id}/documents/document-id`,
+      headers: {
+        origin: "http://localhost:5173",
+        "access-control-request-method": "DELETE",
+      },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.headers["access-control-allow-origin"]).toBe(
+      "http://localhost:5173",
+    );
+    expect(response.headers["access-control-allow-methods"]).toContain(
+      "DELETE",
+    );
+    await app.close();
+  });
+
   it("reports database readiness without authentication", async () => {
     const { app, repository } = await createHarness();
     const response = await app.inject({ method: "GET", url: "/ready" });

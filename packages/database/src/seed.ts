@@ -1,10 +1,12 @@
 import { argon2id, hash } from "argon2";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { createDatabase } from "./index.js";
 import { requireDatabaseUrl } from "./env.js";
 import {
   applications,
   auditEvents,
+  documentCategories,
+  documentVersions,
   documents,
   findings,
   tenants,
@@ -40,6 +42,12 @@ const applicationIds = {
   app0147: "aaaaaaaa-aaaa-4aaa-8aaa-000000000147",
   app0146: "aaaaaaaa-aaaa-4aaa-8aaa-000000000146",
   app0145: "aaaaaaaa-aaaa-4aaa-8aaa-000000000145",
+} as const;
+const documentCategoryIds = {
+  developmentPlan: "eeeeeeee-eeee-4eee-8eee-000000000001",
+  environmentalClearance: "eeeeeeee-eeee-4eee-8eee-000000000002",
+  landOwnership: "eeeeeeee-eeee-4eee-8eee-000000000003",
+  other: "eeeeeeee-eeee-4eee-8eee-000000000004",
 } as const;
 
 const { db, client } = createDatabase(requireDatabaseUrl());
@@ -99,6 +107,70 @@ try {
         .where(
           and(eq(users.tenantId, tenantId), eq(users.id, reviewerIds.maria)),
         );
+    }
+
+    await transaction
+      .insert(documentCategories)
+      .values([
+        {
+          id: documentCategoryIds.developmentPlan,
+          tenantId,
+          code: "development_plan",
+          name: "Development Plan",
+          checklistItemCode: "development_plan_submitted",
+        },
+        {
+          id: documentCategoryIds.environmentalClearance,
+          tenantId,
+          code: "environmental_clearance",
+          name: "Environmental Clearance",
+          checklistItemCode: "environmental_clearance_valid",
+        },
+        {
+          id: documentCategoryIds.landOwnership,
+          tenantId,
+          code: "land_ownership",
+          name: "Proof of Land Ownership",
+          checklistItemCode: "land_ownership_verified",
+        },
+        {
+          id: documentCategoryIds.other,
+          tenantId,
+          code: "other_supporting_document",
+          name: "Other Supporting Document",
+          checklistItemCode: "other_supporting_document_reviewed",
+        },
+      ])
+      .onConflictDoNothing();
+
+    const categoryRows = await transaction
+      .select({ id: documentCategories.id, code: documentCategories.code })
+      .from(documentCategories)
+      .where(
+        and(
+          eq(documentCategories.tenantId, tenantId),
+          inArray(documentCategories.code, [
+            "development_plan",
+            "environmental_clearance",
+            "land_ownership",
+          ]),
+        ),
+      );
+    const categoryIdByCode = new Map(
+      categoryRows.map((category) => [category.code, category.id]),
+    );
+    const developmentPlanCategoryId = categoryIdByCode.get("development_plan");
+    const environmentalClearanceCategoryId = categoryIdByCode.get(
+      "environmental_clearance",
+    );
+    const landOwnershipCategoryId = categoryIdByCode.get("land_ownership");
+
+    if (
+      !developmentPlanCategoryId ||
+      !environmentalClearanceCategoryId ||
+      !landOwnershipCategoryId
+    ) {
+      throw new Error("Document category seed did not complete.");
     }
 
     await transaction
@@ -171,31 +243,70 @@ try {
           id: "bbbbbbbb-bbbb-4bbb-8bbb-000000000001",
           tenantId,
           applicationId: applicationIds.app0148,
-          name: "Subdivision Development Plan.pdf",
-          storageKey: "demo/app-0148/subdivision-plan-v2.pdf",
-          mimeType: "application/pdf",
-          sizeBytes: 5_033_165,
-          version: 2,
+          categoryId: developmentPlanCategoryId,
+          currentVersion: 2,
+          createdBy: reviewerIds.maria,
         },
         {
           id: "bbbbbbbb-bbbb-4bbb-8bbb-000000000002",
           tenantId,
           applicationId: applicationIds.app0148,
-          name: "Environmental Clearance.pdf",
-          storageKey: "demo/app-0148/environmental-clearance-v1.pdf",
-          mimeType: "application/pdf",
-          sizeBytes: 1_258_291,
-          version: 1,
+          categoryId: environmentalClearanceCategoryId,
+          currentVersion: 1,
+          createdBy: reviewerIds.maria,
         },
         {
           id: "bbbbbbbb-bbbb-4bbb-8bbb-000000000003",
           tenantId,
           applicationId: applicationIds.app0148,
-          name: "Proof of Land Ownership.pdf",
-          storageKey: "demo/app-0148/proof-of-ownership-v1.pdf",
+          categoryId: landOwnershipCategoryId,
+          currentVersion: 1,
+          createdBy: reviewerIds.maria,
+        },
+      ])
+      .onConflictDoNothing();
+
+    await transaction
+      .insert(documentVersions)
+      .values([
+        {
+          id: "ffffffff-ffff-4fff-8fff-000000000001",
+          tenantId,
+          documentId: "bbbbbbbb-bbbb-4bbb-8bbb-000000000001",
+          version: 2,
+          filename: "subdivision-development-plan.pdf",
+          objectKey: "demo/app-0148/subdivision-plan-v2.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 5_033_165,
+          sha256Digest:
+            "0000000000000000000000000000000000000000000000000000000000000000",
+          uploadedBy: reviewerIds.maria,
+        },
+        {
+          id: "ffffffff-ffff-4fff-8fff-000000000002",
+          tenantId,
+          documentId: "bbbbbbbb-bbbb-4bbb-8bbb-000000000002",
+          version: 1,
+          filename: "environmental-clearance.pdf",
+          objectKey: "demo/app-0148/environmental-clearance-v1.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 1_258_291,
+          sha256Digest:
+            "0000000000000000000000000000000000000000000000000000000000000000",
+          uploadedBy: reviewerIds.maria,
+        },
+        {
+          id: "ffffffff-ffff-4fff-8fff-000000000003",
+          tenantId,
+          documentId: "bbbbbbbb-bbbb-4bbb-8bbb-000000000003",
+          version: 1,
+          filename: "proof-of-land-ownership.pdf",
+          objectKey: "demo/app-0148/proof-of-ownership-v1.pdf",
           mimeType: "application/pdf",
           sizeBytes: 880_640,
-          version: 1,
+          sha256Digest:
+            "0000000000000000000000000000000000000000000000000000000000000000",
+          uploadedBy: reviewerIds.maria,
         },
       ])
       .onConflictDoNothing();

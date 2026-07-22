@@ -30,9 +30,17 @@ try {
 
   for (const file of files) {
     const sql = await readFile(`${migrationsDirectory}/${file}`, "utf8");
-    const hash = createHash("sha256").update(sql).digest("hex");
+    const normalizedSql = sql.replaceAll("\r\n", "\n");
+    const hash = createHash("sha256").update(normalizedSql).digest("hex");
+    const lineEndingHashes = [
+      hash,
+      createHash("sha256").update(sql).digest("hex"),
+      createHash("sha256")
+        .update(normalizedSql.replaceAll("\n", "\r\n"))
+        .digest("hex"),
+    ];
 
-    if (applied.has(hash)) {
+    if (lineEndingHashes.some((candidate) => applied.has(candidate))) {
       console.log(`Already applied: ${file}`);
       continue;
     }

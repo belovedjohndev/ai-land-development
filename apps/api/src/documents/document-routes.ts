@@ -211,6 +211,32 @@ export function registerDocumentRoutes(
       }
     },
   );
+
+  app.delete(
+    "/api/applications/:applicationId/documents/:documentId",
+    async (request, reply) => {
+      const context = await options.requirePermission(
+        request,
+        reply,
+        "documents:archive",
+      );
+      if (!context) return;
+      const params = DocumentParamsSchema.safeParse(request.params);
+      if (!params.success) {
+        return reply.code(400).send({ message: "Invalid document ID." });
+      }
+      try {
+        await options.service.archive(
+          context,
+          params.data.applicationId,
+          params.data.documentId,
+        );
+        return reply.code(204).send();
+      } catch (error) {
+        return sendDocumentError(error, reply);
+      }
+    },
+  );
 }
 
 export function documentMultipartLimits() {

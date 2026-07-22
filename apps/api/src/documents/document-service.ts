@@ -295,6 +295,24 @@ export class DocumentService {
     return { url: download.url, expiresAt: download.expiresAt.toISOString() };
   }
 
+  async archive(
+    context: AuthenticatedRequestContext,
+    applicationId: string,
+    documentId: string,
+  ): Promise<void> {
+    const result = await this.documents.archiveDocument(
+      context,
+      applicationId,
+      documentId,
+    );
+    if (result === "missing") {
+      throw new DocumentServiceError(
+        "DOCUMENT_NOT_FOUND",
+        "Document not found.",
+      );
+    }
+  }
+
   private async cleanup(objectKey: string): Promise<void> {
     try {
       await this.storage.deleteObject(objectKey);

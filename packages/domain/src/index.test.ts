@@ -3,7 +3,9 @@ import {
   canRecordDecision,
   canTransition,
   ReviewDecisionSchema,
+  roleCan,
   statusAfterDecision,
+  type UserRole,
 } from "./index.js";
 
 describe("application workflow", () => {
@@ -32,4 +34,27 @@ describe("application workflow", () => {
     expect(canRecordDecision("approved", "reject")).toBe(false);
     expect(canRecordDecision("rejected", "override")).toBe(false);
   });
+});
+
+describe("role authorization", () => {
+  const permissions: Record<
+    UserRole,
+    { readApplications: boolean; submitDecisions: boolean }
+  > = {
+    admin: { readApplications: true, submitDecisions: true },
+    reviewer: { readApplications: true, submitDecisions: true },
+    viewer: { readApplications: true, submitDecisions: false },
+  };
+
+  for (const [role, expected] of Object.entries(permissions) as [
+    UserRole,
+    (typeof permissions)[UserRole],
+  ][]) {
+    it(`applies application permissions for ${role}`, () => {
+      expect(roleCan(role, "applications:read")).toBe(
+        expected.readApplications,
+      );
+      expect(roleCan(role, "decisions:submit")).toBe(expected.submitDecisions);
+    });
+  }
 });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Building2,
@@ -6,11 +6,17 @@ import {
   ClipboardCheck,
   FileText,
   Gauge,
-  LayoutDashboard,
   MapPinned,
-  Scale,
   ShieldCheck,
 } from "lucide-react";
+import {
+  authenticatedFetch,
+  AuthenticationRequiredError,
+  getSession,
+  type SessionView,
+} from "./auth";
+import { AuthenticatedShell } from "./AuthenticatedShell";
+import { SignInScreen } from "./SignInScreen";
 
 type Finding = {
   id: string;
@@ -42,7 +48,6 @@ type Application = {
   audit: Audit[];
 };
 
-const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 const labels: Record<string, string> = {
   under_review: "Under Review",
   ai_prescreened: "AI Pre-Screened",
@@ -54,6 +59,9 @@ const labels: Record<string, string> = {
 };
 
 export default function App() {
+  const [session, setSession] = useState<SessionView | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [authNotice, setAuthNotice] = useState("");
   const [items, setItems] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -62,31 +70,69 @@ export default function App() {
   const [override, setOverride] = useState("");
   const [message, setMessage] = useState("");
 
+  const expireSession = useCallback(() => {
+    setSession(null);
+    setItems([]);
+    setSelected(null);
+    setAuthNotice("Your session expired. Sign in again to continue.");
+  }, []);
+
   useEffect(() => {
-    let cancelled = false;
-    async function load() {
+    const controller = new AbortController();
+    async function restoreSession() {
       try {
-        const response = await fetch(`${apiUrl}/api/applications`);
+        setSession(await getSession(controller.signal));
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
+        setAuthNotice(
+          error instanceof Error
+            ? error.message
+            : "The current session could not be checked.",
+        );
+      } finally {
+        if (!controller.signal.aborted) setCheckingSession(false);
+      }
+    }
+    void restoreSession();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    const controller = new AbortController();
+    async function load() {
+      setLoading(true);
+      setLoadError("");
+      try {
+        const response = await authenticatedFetch("/api/applications", {
+          signal: controller.signal,
+        });
         if (!response.ok)
           throw new Error("The application queue could not be loaded.");
         const data = await response.json();
-        if (!cancelled) setItems(data);
+        if (!controller.signal.aborted) setItems(data);
       } catch (error) {
-        if (!cancelled)
+        if (error instanceof AuthenticationRequiredError) {
+          expireSession();
+          return;
+        }
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
+        if (!controller.signal.aborted) {
           setLoadError(
             error instanceof Error
               ? error.message
               : "The application queue could not be loaded.",
           );
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
     void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    return () => controller.abort();
+  }, [expireSession, session]);
   const metrics = useMemo(
     () => ({
       submitted: items.length,
@@ -111,10 +157,11 @@ export default function App() {
       ...(action === "override" ? { overrideJustification: override } : {}),
     };
     try {
-      const response = await fetch(
-        `${apiUrl}/api/applications/${selected.id}/decisions`,
+      const response = await authenticatedFetch(
+        `/api/applications/${selected.id}/decisions`,
         {
           method: "POST",
+          credentials: "include",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload),
         },
@@ -134,6 +181,10 @@ export default function App() {
         "Decision recorded in PostgreSQL and appended to the audit trail.",
       );
     } catch (error) {
+      if (error instanceof AuthenticationRequiredError) {
+        expireSession();
+        return;
+      }
       setMessage(
         error instanceof Error
           ? error.message
@@ -142,81 +193,70 @@ export default function App() {
     }
   }
 
-  return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">LD</div>
-          <div>
-            <strong>AI-LDMS</strong>
-            <span>Land Review Portal</span>
-          </div>
-        </div>
-        <nav>
-          <button className="nav active" onClick={() => setSelected(null)}>
-            <LayoutDashboard size={17} />
-            Reviewer Dashboard
-          </button>
-          <button className="nav">
-            <FileText size={17} />
-            Applications
-          </button>
-          <button className="nav">
-            <Gauge size={17} />
-            AI Pre-Screening
-          </button>
-          <button className="nav">
-            <Scale size={17} />
-            Compliance Review
-          </button>
-          <button className="nav">
-            <ClipboardCheck size={17} />
-            Reports
-          </button>
-        </nav>
-        <div className="policy-note">
-          <ShieldCheck size={18} />
-          <div>
-            <strong>Human-controlled decisions</strong>
-            <span>
-              AI findings are advisory and never finalize an application.
-            </span>
-          </div>
-        </div>
-      </aside>
-      <main className="content">
-        {loadError && (
-          <section className="card">
-            <p className="message">{loadError}</p>
-          </section>
-        )}
-        {loading ? (
-          <section className="card">
-            <p>Loading tenant-scoped application data…</p>
-          </section>
-        ) : selected ? (
-          <ApplicationWorkspace
-            item={selected}
-            note={note}
-            setNote={setNote}
-            override={override}
-            setOverride={setOverride}
-            decide={decide}
-            message={message}
-            close={() => setSelected(null)}
-          />
-        ) : (
-          <Dashboard
-            items={items}
-            metrics={metrics}
-            open={(item) => {
-              setSelected(item);
-              setMessage("");
-            }}
-          />
-        )}
+  if (checkingSession) {
+    return (
+      <main className="session-check" aria-live="polite">
+        <div className="brand-mark">LD</div>
+        <p>Checking your session…</p>
       </main>
-    </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <SignInScreen
+        notice={authNotice}
+        onSignedIn={(activeSession) => {
+          setSession(activeSession);
+          setAuthNotice("");
+        }}
+      />
+    );
+  }
+
+  return (
+    <AuthenticatedShell
+      session={session}
+      onShowDashboard={() => setSelected(null)}
+      onSignedOut={() => {
+        setSession(null);
+        setItems([]);
+        setSelected(null);
+        setAuthNotice("");
+      }}
+    >
+      {loadError && (
+        <section className="card">
+          <p className="message">{loadError}</p>
+        </section>
+      )}
+      {loading ? (
+        <section className="card">
+          <p>Loading tenant-scoped application data…</p>
+        </section>
+      ) : selected ? (
+        <ApplicationWorkspace
+          item={selected}
+          note={note}
+          setNote={setNote}
+          override={override}
+          setOverride={setOverride}
+          decide={decide}
+          canDecide={session.user.role !== "viewer"}
+          message={message}
+          close={() => setSelected(null)}
+        />
+      ) : (
+        <Dashboard
+          items={items}
+          metrics={metrics}
+          open={(item) => {
+            setSelected(item);
+            setMessage("");
+          }}
+        />
+      )}
+    </AuthenticatedShell>
   );
 }
 
@@ -363,6 +403,7 @@ function ApplicationWorkspace({
   override,
   setOverride,
   decide,
+  canDecide,
   message,
   close,
 }: {
@@ -372,6 +413,7 @@ function ApplicationWorkspace({
   override: string;
   setOverride: (v: string) => void;
   decide: (a: "approve" | "request_revision" | "reject" | "override") => void;
+  canDecide: boolean;
   message: string;
   close: () => void;
 }) {
@@ -521,51 +563,64 @@ function ApplicationWorkspace({
               <div className="road">Municipal access road</div>
             </div>
           </section>
-          <section className="card decision">
-            <div className="card-head">
-              <div>
-                <h2>Reviewer decision</h2>
-                <p>All actions are attributable.</p>
+          {canDecide ? (
+            <section className="card decision">
+              <div className="card-head">
+                <div>
+                  <h2>Reviewer decision</h2>
+                  <p>All actions are attributable.</p>
+                </div>
               </div>
-            </div>
-            <label>
-              Review note
-              <textarea
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="Record evidence checked and the basis for the decision."
-              />
-            </label>
-            <div className="decision-buttons">
-              <button className="approve" onClick={() => decide("approve")}>
-                Approve
-              </button>
+              <label>
+                Review note
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Record evidence checked and the basis for the decision."
+                />
+              </label>
+              <div className="decision-buttons">
+                <button className="approve" onClick={() => decide("approve")}>
+                  Approve
+                </button>
+                <button
+                  className="revise"
+                  onClick={() => decide("request_revision")}
+                >
+                  Request revision
+                </button>
+                <button className="reject" onClick={() => decide("reject")}>
+                  Reject
+                </button>
+              </div>
+              <label>
+                Override justification
+                <textarea
+                  value={override}
+                  onChange={(e) => setOverride(e.target.value)}
+                  placeholder="Required when overriding an AI or policy finding."
+                />
+              </label>
               <button
-                className="revise"
-                onClick={() => decide("request_revision")}
+                className="secondary full"
+                onClick={() => decide("override")}
               >
-                Request revision
+                Record manual override
               </button>
-              <button className="reject" onClick={() => decide("reject")}>
-                Reject
-              </button>
-            </div>
-            <label>
-              Override justification
-              <textarea
-                value={override}
-                onChange={(e) => setOverride(e.target.value)}
-                placeholder="Required when overriding an AI or policy finding."
-              />
-            </label>
-            <button
-              className="secondary full"
-              onClick={() => decide("override")}
-            >
-              Record manual override
-            </button>
-            {message && <p className="message">{message}</p>}
-          </section>
+              {message && <p className="message">{message}</p>}
+            </section>
+          ) : (
+            <section className="card viewer-notice">
+              <ShieldCheck aria-hidden="true" />
+              <div>
+                <h2>Read-only access</h2>
+                <p>
+                  Viewers can inspect applications and audit history but cannot
+                  submit decisions.
+                </p>
+              </div>
+            </section>
+          )}
           <section className="card documents">
             <div className="card-head">
               <div>

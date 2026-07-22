@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  char,
   check,
   foreignKey,
   index,
@@ -39,6 +40,11 @@ export const decisionAction = pgEnum("decision_action", [
   "reject",
   "override",
 ]);
+export const userRole = pgEnum("user_role", ["admin", "reviewer", "viewer"]);
+export const authenticationAuditEventType = pgEnum(
+  "authentication_audit_event_type",
+  ["sign_in_succeeded", "sign_in_failed", "signed_out", "session_expired"],
+);
 
 export const tenants = pgTable("tenants", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -57,14 +63,103 @@ export const users = pgTable(
       .references(() => tenants.id),
     email: text("email").notNull(),
     name: text("name").notNull(),
-    role: text("role").notNull(),
+    role: userRole("role").notNull(),
+    passwordHash: text("password_hash").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
     uniqueIndex("users_tenant_email_uq").on(table.tenantId, table.email),
+    uniqueIndex("users_email_normalized_uq").on(sql`lower(${table.email})`),
     uniqueIndex("users_tenant_id_id_uq").on(table.tenantId, table.id),
+    check(
+      "users_password_hash_argon2id_ck",
+      sql`${table.passwordHash} LIKE '$argon2id$%'`,
+    ),
+  ],
+);
+
+export const authSessions = pgTable(
+  "auth_sessions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    tokenDigest: char("token_digest", { length: 64 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("auth_sessions_token_digest_uq").on(table.tokenDigest),
+    index("auth_sessions_tenant_expiry_idx").on(
+      table.tenantId,
+      table.expiresAt,
+    ),
+    index("auth_sessions_active_expiry_idx")
+      .on(table.expiresAt)
+      .where(sql`${table.revokedAt} IS NULL`),
+    check(
+      "auth_sessions_token_digest_ck",
+      sql`${table.tokenDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    check(
+      "auth_sessions_expiry_ck",
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+    check(
+      "auth_sessions_revocation_ck",
+      sql`${table.revokedAt} IS NULL OR ${table.revokedAt} >= ${table.createdAt}`,
+    ),
+    foreignKey({
+      name: "auth_sessions_user_tenant_fk",
+      columns: [table.tenantId, table.userId],
+      foreignColumns: [users.tenantId, users.id],
+    }),
+  ],
+);
+
+export const authenticationAuditEvents = pgTable(
+  "authentication_audit_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tenantId: uuid("tenant_id"),
+    actorId: uuid("actor_id"),
+    eventType: authenticationAuditEventType("event_type").notNull(),
+    subjectDigest: char("subject_digest", { length: 64 }),
+    metadata: jsonb("metadata")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("authentication_audit_tenant_created_idx").on(
+      table.tenantId,
+      table.createdAt,
+    ),
+    index("authentication_audit_subject_created_idx").on(
+      table.subjectDigest,
+      table.createdAt,
+    ),
+    check(
+      "authentication_audit_actor_tenant_ck",
+      sql`(${table.tenantId} IS NULL AND ${table.actorId} IS NULL) OR (${table.tenantId} IS NOT NULL AND ${table.actorId} IS NOT NULL)`,
+    ),
+    check(
+      "authentication_audit_subject_digest_ck",
+      sql`${table.subjectDigest} IS NULL OR ${table.subjectDigest} ~ '^[0-9a-f]{64}$'`,
+    ),
+    foreignKey({
+      name: "authentication_audit_actor_tenant_fk",
+      columns: [table.tenantId, table.actorId],
+      foreignColumns: [users.tenantId, users.id],
+    }),
   ],
 );
 

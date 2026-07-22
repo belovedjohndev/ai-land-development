@@ -13,7 +13,7 @@ import { AuthenticationService } from "./authentication/authentication-service.j
 import type { DocumentRepository } from "./documents/document-repository.js";
 import {
   documentMultipartLimits,
-  registerDocumentUploadRoutes,
+  registerDocumentRoutes,
 } from "./documents/document-routes.js";
 import { DocumentService } from "./documents/document-service.js";
 import type { ObjectStorage } from "./documents/object-storage.js";
@@ -37,6 +37,7 @@ type BuildAppOptions = {
   passwordHasher: PasswordHasher;
   documentRepository: DocumentRepository;
   objectStorage: ObjectStorage;
+  documentDownloadTtlSeconds: number;
   sessionTtlMs: number;
   secureCookies: boolean;
   logger?: boolean;
@@ -48,6 +49,7 @@ export async function buildApp({
   passwordHasher,
   documentRepository,
   objectStorage,
+  documentDownloadTtlSeconds,
   sessionTtlMs,
   secureCookies,
   logger = true,
@@ -146,9 +148,13 @@ export async function buildApp({
     return context;
   }
 
-  registerDocumentUploadRoutes(app, {
+  registerDocumentRoutes(app, {
     repository: documentRepository,
-    service: new DocumentService(documentRepository, objectStorage),
+    service: new DocumentService(
+      documentRepository,
+      objectStorage,
+      documentDownloadTtlSeconds,
+    ),
     requirePermission,
   });
 

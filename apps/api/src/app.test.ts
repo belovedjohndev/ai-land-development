@@ -108,6 +108,7 @@ async function createHarness(options: HarnessOptions = {}) {
     repository,
     documentRepository,
     objectStorage,
+    documentDownloadTtlSeconds: 60,
     passwordHasher,
     sessionRepository,
     sessionTtlMs: 12 * 60 * 60 * 1_000,

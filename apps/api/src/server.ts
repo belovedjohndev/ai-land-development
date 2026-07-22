@@ -18,6 +18,12 @@ const sessionTtlHours = z.coerce
   .positive()
   .max(168)
   .parse(process.env.SESSION_TTL_HOURS ?? "12");
+const documentDownloadTtlSeconds = z.coerce
+  .number()
+  .int()
+  .min(15)
+  .max(300)
+  .parse(process.env.DOCUMENT_DOWNLOAD_TTL_SECONDS ?? "60");
 const storageConfig = z
   .object({
     endpoint: z.string().url().optional(),
@@ -50,6 +56,7 @@ const app = await buildApp({
   repository: new PostgresApplicationRepository(db),
   documentRepository,
   objectStorage: new S3ObjectStorage(storageConfig),
+  documentDownloadTtlSeconds,
   sessionRepository: new PostgresSessionRepository(db),
   passwordHasher: new Argon2idPasswordHasher(),
   sessionTtlMs: sessionTtlHours * 60 * 60 * 1_000,

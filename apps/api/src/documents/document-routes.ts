@@ -11,6 +11,10 @@ import { DocumentService, DocumentServiceError } from "./document-service.js";
 const ApplicationParamsSchema = z.object({
   applicationId: z.string().uuid(),
 });
+const DocumentVersionParamsSchema = ApplicationParamsSchema.extend({
+  documentId: z.string().uuid(),
+  version: z.coerce.number().int().positive(),
+});
 const IdempotencyHeaderSchema = z.object({
   "idempotency-key": z.string().uuid(),
 });
@@ -28,7 +32,7 @@ type RegisterDocumentRoutesOptions = {
   requirePermission: RequirePermission;
 };
 
-export function registerDocumentUploadRoutes(
+export function registerDocumentRoutes(
   app: FastifyInstance,
   options: RegisterDocumentRoutesOptions,
 ): void {
@@ -41,6 +45,30 @@ export function registerDocumentUploadRoutes(
     if (!context) return;
     return options.repository.listCategories(context.tenantId);
   });
+
+  app.get(
+    "/api/applications/:applicationId/documents",
+    async (request, reply) => {
+      const context = await options.requirePermission(
+        request,
+        reply,
+        "documents:read",
+      );
+      if (!context) return;
+      const params = ApplicationParamsSchema.safeParse(request.params);
+      if (!params.success) {
+        return reply.code(400).send({ message: "Invalid application ID." });
+      }
+      const documents = await options.repository.listDocuments(
+        context.tenantId,
+        params.data.applicationId,
+      );
+      if (!documents) {
+        return reply.code(404).send({ message: "Application not found." });
+      }
+      return documents;
+    },
+  );
 
   app.post(
     "/api/applications/:applicationId/documents",
@@ -108,6 +136,32 @@ export function registerDocumentUploadRoutes(
       }
     },
   );
+
+  app.post(
+    "/api/applications/:applicationId/documents/:documentId/versions/:version/download",
+    async (request, reply) => {
+      const context = await options.requirePermission(
+        request,
+        reply,
+        "documents:download",
+      );
+      if (!context) return;
+      const params = DocumentVersionParamsSchema.safeParse(request.params);
+      if (!params.success) {
+        return reply.code(400).send({ message: "Invalid document version." });
+      }
+      try {
+        return await options.service.createDownload({
+          context,
+          applicationId: params.data.applicationId,
+          documentId: params.data.documentId,
+          version: params.data.version,
+        });
+      } catch (error) {
+        return sendDocumentError(error, reply);
+      }
+    },
+  );
 }
 
 export function documentMultipartLimits() {
@@ -156,7 +210,8 @@ function sendDocumentError(error: unknown, reply: FastifyReply) {
           : error.code === "STORAGE_UNAVAILABLE"
             ? 502
             : error.code === "APPLICATION_NOT_FOUND" ||
-                error.code === "CATEGORY_NOT_FOUND"
+                error.code === "CATEGORY_NOT_FOUND" ||
+                error.code === "DOCUMENT_NOT_FOUND"
               ? 404
               : 400;
   return reply

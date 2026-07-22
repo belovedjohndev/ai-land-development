@@ -28,9 +28,22 @@ export type UploadDocumentResult = {
   replayed: boolean;
 };
 
+export type DownloadDocumentCommand = {
+  context: AuthenticatedRequestContext;
+  applicationId: string;
+  documentId: string;
+  version: number;
+};
+
+export type DownloadDocumentResult = {
+  url: string;
+  expiresAt: string;
+};
+
 export type DocumentServiceErrorCode =
   | "APPLICATION_NOT_FOUND"
   | "CATEGORY_NOT_FOUND"
+  | "DOCUMENT_NOT_FOUND"
   | "UNSUPPORTED_MEDIA_TYPE"
   | "FILE_TOO_LARGE"
   | "EMPTY_FILE"
@@ -51,6 +64,7 @@ export class DocumentService {
   constructor(
     private readonly documents: DocumentRepository,
     private readonly storage: ObjectStorage,
+    private readonly downloadTtlSeconds: number,
   ) {}
 
   async upload(command: UploadDocumentCommand): Promise<UploadDocumentResult> {
@@ -139,6 +153,44 @@ export class DocumentService {
       }
       throw error;
     }
+  }
+
+  async createDownload(
+    command: DownloadDocumentCommand,
+  ): Promise<DownloadDocumentResult> {
+    const version = await this.documents.findVersionForDownload(
+      command.context.tenantId,
+      command.applicationId,
+      command.documentId,
+      command.version,
+    );
+    if (!version) {
+      throw new DocumentServiceError(
+        "DOCUMENT_NOT_FOUND",
+        "Document version not found.",
+      );
+    }
+
+    let download;
+    try {
+      download = await this.storage.createSignedDownload(
+        version.objectKey,
+        version.filename,
+        this.downloadTtlSeconds,
+      );
+    } catch {
+      throw new DocumentServiceError(
+        "STORAGE_UNAVAILABLE",
+        "Document storage is temporarily unavailable.",
+      );
+    }
+
+    await this.documents.recordDownload(
+      command.context,
+      command.applicationId,
+      version,
+    );
+    return { url: download.url, expiresAt: download.expiresAt.toISOString() };
   }
 
   private async cleanup(objectKey: string): Promise<void> {

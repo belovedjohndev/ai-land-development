@@ -74,6 +74,7 @@ export async function buildApp({
   await app.register(cors, {
     origin: process.env.WEB_ORIGIN ?? "http://localhost:5173",
     credentials: true,
+    methods: ["GET", "HEAD", "POST", "DELETE"],
   });
   await app.register(cookie);
   await app.register(multipart, { limits: documentMultipartLimits() });

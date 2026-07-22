@@ -125,6 +125,27 @@ function digest(value: string): string {
 }
 
 describe("authentication API", () => {
+  it("allows browser preflight for document archival", async () => {
+    const { app } = await createHarness();
+    const response = await app.inject({
+      method: "OPTIONS",
+      url: `/api/applications/${application.id}/documents/document-id`,
+      headers: {
+        origin: "http://localhost:5173",
+        "access-control-request-method": "DELETE",
+      },
+    });
+
+    expect(response.statusCode).toBe(204);
+    expect(response.headers["access-control-allow-origin"]).toBe(
+      "http://localhost:5173",
+    );
+    expect(response.headers["access-control-allow-methods"]).toContain(
+      "DELETE",
+    );
+    await app.close();
+  });
+
   it("reports database readiness without authentication", async () => {
     const { app, repository } = await createHarness();
     const response = await app.inject({ method: "GET", url: "/ready" });

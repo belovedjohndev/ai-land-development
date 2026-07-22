@@ -269,9 +269,6 @@ export const documents = pgTable(
       table.applicationId,
     ),
     uniqueIndex("documents_tenant_id_id_uq").on(table.tenantId, table.id),
-    uniqueIndex("documents_active_category_uq")
-      .on(table.tenantId, table.applicationId, table.categoryId)
-      .where(sql`${table.archivedAt} IS NULL`),
     check("documents_current_version_ck", sql`${table.currentVersion} >= 1`),
     check(
       "documents_archive_actor_ck",

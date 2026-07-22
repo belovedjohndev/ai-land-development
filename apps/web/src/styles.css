@@ -740,6 +740,74 @@ td small {
 .documents {
   padding-bottom: 10px;
 }
+.document-upload {
+  display: grid;
+  gap: 7px;
+  padding: 15px 16px;
+  border-bottom: 1px solid #edf2ef;
+  background: #f8fbf9;
+}
+.document-upload label {
+  color: #53635b;
+  font-size: 11px;
+  font-weight: 800;
+}
+.document-upload select,
+.document-upload input[type="file"] {
+  width: 100%;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid #d7e1dc;
+  border-radius: 9px;
+  background: #fff;
+  color: #263a31;
+  font: inherit;
+  font-size: 12px;
+}
+.document-upload small {
+  color: #74817a;
+  line-height: 1.4;
+}
+.document-submit {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+}
+.document-submit:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+.upload-progress {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  color: #53635b;
+  font-size: 11px;
+}
+.upload-progress progress {
+  width: 100%;
+  accent-color: #176b3a;
+}
+.document-error,
+.document-state {
+  margin: 0;
+  padding: 12px 16px;
+  color: #a4342e;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.document-state {
+  color: #61716a;
+}
+.document-load-error {
+  border-bottom: 1px solid #edf2ef;
+}
+.document-list {
+  display: grid;
+}
 .doc {
   display: flex;
   gap: 10px;

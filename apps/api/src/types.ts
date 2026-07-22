@@ -90,6 +90,10 @@ export type RequestContext = {
   actorId: string;
 };
 
+export type AuthenticatedRequestContext = RequestContext & {
+  role: UserRole;
+};
+
 export interface ApplicationRepository {
   checkHealth(): Promise<void>;
   listApplications(tenantId: string): Promise<ApplicationView[]>;

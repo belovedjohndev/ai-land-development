@@ -12,6 +12,7 @@ import {
   DocumentRepositoryError,
   type ArchiveDocumentResult,
   type CreateDocumentInput,
+  type CreateTargetValidation,
   type DocumentCategoryView,
   type DocumentRepository,
   type DocumentView,
@@ -41,6 +42,28 @@ export class PostgresDocumentRepository implements DocumentRepository {
         ),
       )
       .orderBy(asc(documentCategories.name));
+  }
+
+  async validateCreateTarget(
+    tenantId: string,
+    applicationId: string,
+    categoryId: string,
+  ): Promise<CreateTargetValidation> {
+    if (!(await this.applicationExists(tenantId, applicationId))) {
+      return "application_missing";
+    }
+    const [category] = await this.db
+      .select({ id: documentCategories.id })
+      .from(documentCategories)
+      .where(
+        and(
+          eq(documentCategories.tenantId, tenantId),
+          eq(documentCategories.id, categoryId),
+          eq(documentCategories.active, true),
+        ),
+      )
+      .limit(1);
+    return category ? "valid" : "category_missing";
   }
 
   async listDocuments(

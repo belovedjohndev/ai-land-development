@@ -72,6 +72,8 @@ export type DownloadableDocumentVersion = {
 };
 
 export type ArchiveDocumentResult = "archived" | "already_archived" | "missing";
+export type CreateTargetValidation =
+  "valid" | "application_missing" | "category_missing";
 
 export type DocumentRepositoryErrorCode =
   | "APPLICATION_NOT_FOUND"
@@ -93,6 +95,11 @@ export class DocumentRepositoryError extends Error {
 
 export interface DocumentRepository {
   listCategories(tenantId: string): Promise<DocumentCategoryView[]>;
+  validateCreateTarget(
+    tenantId: string,
+    applicationId: string,
+    categoryId: string,
+  ): Promise<CreateTargetValidation>;
   listDocuments(
     tenantId: string,
     applicationId: string,

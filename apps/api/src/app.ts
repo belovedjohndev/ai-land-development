@@ -1,5 +1,6 @@
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
+import multipart from "@fastify/multipart";
 import {
   ReviewDecisionSchema,
   roleCan,
@@ -9,6 +10,13 @@ import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { z } from "zod";
 import { AuthenticatedRequestContextResolver } from "./authentication/authenticated-request-context.js";
 import { AuthenticationService } from "./authentication/authentication-service.js";
+import type { DocumentRepository } from "./documents/document-repository.js";
+import {
+  documentMultipartLimits,
+  registerDocumentUploadRoutes,
+} from "./documents/document-routes.js";
+import { DocumentService } from "./documents/document-service.js";
+import type { ObjectStorage } from "./documents/object-storage.js";
 import { RepositoryError } from "./errors.js";
 import type {
   ApplicationRepository,
@@ -27,6 +35,8 @@ type BuildAppOptions = {
   repository: ApplicationRepository;
   sessionRepository: SessionRepository;
   passwordHasher: PasswordHasher;
+  documentRepository: DocumentRepository;
+  objectStorage: ObjectStorage;
   sessionTtlMs: number;
   secureCookies: boolean;
   logger?: boolean;
@@ -36,6 +46,8 @@ export async function buildApp({
   repository,
   sessionRepository,
   passwordHasher,
+  documentRepository,
+  objectStorage,
   sessionTtlMs,
   secureCookies,
   logger = true,
@@ -55,6 +67,7 @@ export async function buildApp({
     credentials: true,
   });
   await app.register(cookie);
+  await app.register(multipart, { limits: documentMultipartLimits() });
 
   app.get("/health", async () => ({
     status: "ok",
@@ -132,6 +145,12 @@ export async function buildApp({
     }
     return context;
   }
+
+  registerDocumentUploadRoutes(app, {
+    repository: documentRepository,
+    service: new DocumentService(documentRepository, objectStorage),
+    requirePermission,
+  });
 
   app.get("/api/applications", async (request, reply) => {
     const context = await requirePermission(

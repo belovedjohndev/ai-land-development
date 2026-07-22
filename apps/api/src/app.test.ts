@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import type { UserRole } from "@ald/domain";
 import { describe, expect, it, vi } from "vitest";
 import { buildApp } from "./app.js";
+import type { DocumentRepository } from "./documents/document-repository.js";
+import type { ObjectStorage } from "./documents/object-storage.js";
 import type {
   ApplicationRepository,
   ApplicationView,
@@ -86,8 +88,26 @@ async function createHarness(options: HarnessOptions = {}) {
     revokeSession: vi.fn(async () => undefined),
     recordFailedSignIn: vi.fn(async () => undefined),
   };
+  const documentRepository: DocumentRepository = {
+    listCategories: vi.fn(async () => []),
+    validateCreateTarget: vi.fn(async () => "valid" as const),
+    listDocuments: vi.fn(async () => []),
+    findUploadByIdempotency: vi.fn(async () => null),
+    createDocument: vi.fn(),
+    replaceDocument: vi.fn(),
+    findVersionForDownload: vi.fn(async () => null),
+    recordDownload: vi.fn(async () => undefined),
+    archiveDocument: vi.fn(async () => "missing" as const),
+  };
+  const objectStorage: ObjectStorage = {
+    putObject: vi.fn(async () => undefined),
+    deleteObject: vi.fn(async () => undefined),
+    createSignedDownload: vi.fn(),
+  };
   const app = await buildApp({
     repository,
+    documentRepository,
+    objectStorage,
     passwordHasher,
     sessionRepository,
     sessionTtlMs: 12 * 60 * 60 * 1_000,

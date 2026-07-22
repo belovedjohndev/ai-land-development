@@ -10,6 +10,8 @@ import {
 } from "./schema.js";
 
 const tenantId = "00000000-0000-4000-8000-000000000001";
+const unusablePasswordHash =
+  "$argon2id$v=19$m=65536,t=3,p=1$c2xpY2UtMy11bnVzYWJsZQ$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const reviewerIds = {
   maria: "11111111-1111-4111-8111-111111111111",
   daniel: "22222222-2222-4222-8222-222222222222",
@@ -44,6 +46,7 @@ try {
           email: "maria.santos@example.test",
           name: "Maria Santos",
           role: "reviewer",
+          passwordHash: unusablePasswordHash,
         },
         {
           id: reviewerIds.daniel,
@@ -51,6 +54,7 @@ try {
           email: "daniel.cruz@example.test",
           name: "Daniel Cruz",
           role: "reviewer",
+          passwordHash: unusablePasswordHash,
         },
         {
           id: reviewerIds.ana,
@@ -58,6 +62,7 @@ try {
           email: "ana.reyes@example.test",
           name: "Ana Reyes",
           role: "reviewer",
+          passwordHash: unusablePasswordHash,
         },
         {
           id: reviewerIds.ramon,
@@ -65,6 +70,7 @@ try {
           email: "ramon.lee@example.test",
           name: "Ramon Lee",
           role: "reviewer",
+          passwordHash: unusablePasswordHash,
         },
       ])
       .onConflictDoNothing();

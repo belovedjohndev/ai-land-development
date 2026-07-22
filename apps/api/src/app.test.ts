@@ -3,7 +3,9 @@ import { buildApp } from "./app.js";
 import type {
   ApplicationRepository,
   ApplicationView,
+  PasswordHasher,
   RequestContext,
+  SessionRepository,
 } from "./types.js";
 
 const context: RequestContext = {
@@ -26,6 +28,29 @@ const application: ApplicationView = {
   audit: [],
 };
 
+const passwordHasher: PasswordHasher = {
+  hash: vi.fn(async () => "unused"),
+  verify: vi.fn(async () => false),
+};
+
+const sessionRepository: SessionRepository = {
+  findCredentialByEmail: vi.fn(async () => null),
+  createSession: vi.fn(async (user, _tokenDigest, expiresAt) => ({
+    ...user,
+    expiresAt,
+  })),
+  resolveSession: vi.fn(async () => null),
+  revokeSession: vi.fn(async () => undefined),
+  recordFailedSignIn: vi.fn(async () => undefined),
+};
+
+const authenticationOptions = {
+  passwordHasher,
+  sessionRepository,
+  sessionTtlMs: 12 * 60 * 60 * 1_000,
+  secureCookies: false,
+};
+
 function createRepository(): ApplicationRepository {
   return {
     checkHealth: vi.fn(async () => undefined),
@@ -44,6 +69,7 @@ describe("API", () => {
     const app = await buildApp({
       repository,
       requestContext: context,
+      ...authenticationOptions,
       logger: false,
     });
     const response = await app.inject({ method: "GET", url: "/ready" });
@@ -59,6 +85,7 @@ describe("API", () => {
     const app = await buildApp({
       repository,
       requestContext: context,
+      ...authenticationOptions,
       logger: false,
     });
     const response = await app.inject({
@@ -77,6 +104,7 @@ describe("API", () => {
     const app = await buildApp({
       repository,
       requestContext: context,
+      ...authenticationOptions,
       logger: false,
     });
     const response = await app.inject({
@@ -98,6 +126,7 @@ describe("API", () => {
     const app = await buildApp({
       repository,
       requestContext: context,
+      ...authenticationOptions,
       logger: false,
     });
     const response = await app.inject({

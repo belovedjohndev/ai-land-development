@@ -22,6 +22,20 @@ export type AuthenticatedSession = AuthenticatedUser & {
   expiresAt: Date;
 };
 
+export type SessionView = {
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    role: UserRole;
+  };
+  tenant: {
+    id: string;
+    name: string;
+  };
+  expiresAt: string;
+};
+
 export interface SessionRepository {
   findCredentialByEmail(
     normalizedEmail: string,

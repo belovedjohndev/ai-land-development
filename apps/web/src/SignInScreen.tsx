@@ -3,10 +3,11 @@ import { ShieldCheck } from "lucide-react";
 import { signIn, type SessionView } from "./auth";
 
 type SignInScreenProps = {
+  notice?: string;
   onSignedIn: (session: SessionView) => void;
 };
 
-export function SignInScreen({ onSignedIn }: SignInScreenProps) {
+export function SignInScreen({ notice, onSignedIn }: SignInScreenProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -41,6 +42,11 @@ export function SignInScreen({ onSignedIn }: SignInScreenProps) {
         <p>
           Use the account issued by your land development review administrator.
         </p>
+        {notice && (
+          <p className="sign-in-notice" role="status">
+            {notice}
+          </p>
+        )}
         <form onSubmit={handleSubmit}>
           <label htmlFor="email">Email address</label>
           <input

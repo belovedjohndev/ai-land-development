@@ -66,6 +66,15 @@ textarea {
   color: #66746e;
   line-height: 1.55;
 }
+.sign-in-card > .sign-in-notice {
+  margin-top: -10px;
+  padding: 10px 12px;
+  border: 1px solid #eadcb7;
+  border-radius: 10px;
+  background: #fffcf4;
+  color: #76500f;
+  font-size: 12px;
+}
 .sign-in-card form {
   display: grid;
   gap: 8px;
@@ -114,6 +123,18 @@ textarea {
 .sign-in-policy svg {
   flex: 0 0 auto;
   color: #176b3a;
+}
+.session-check {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  color: #53635b;
+}
+.session-check p {
+  margin: 0;
+  font-size: 13px;
 }
 .shell {
   display: grid;

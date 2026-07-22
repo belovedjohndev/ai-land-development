@@ -16,6 +16,39 @@ export type SessionView = {
 
 export const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
+export class AuthenticationRequiredError extends Error {
+  constructor() {
+    super("Authentication required.");
+    this.name = "AuthenticationRequiredError";
+  }
+}
+
+export async function getSession(
+  signal?: AbortSignal,
+): Promise<SessionView | null> {
+  const response = await fetch(`${apiUrl}/api/auth/session`, {
+    credentials: "include",
+    signal,
+  });
+  if (response.status === 401) return null;
+  if (!response.ok) {
+    throw new Error("The current session could not be checked.");
+  }
+  return (await response.json()) as SessionView;
+}
+
+export async function authenticatedFetch(
+  path: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const response = await fetch(`${apiUrl}${path}`, {
+    ...init,
+    credentials: "include",
+  });
+  if (response.status === 401) throw new AuthenticationRequiredError();
+  return response;
+}
+
 export async function signIn(
   email: string,
   password: string,

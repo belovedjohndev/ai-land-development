@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Building2,
@@ -9,7 +9,12 @@ import {
   MapPinned,
   ShieldCheck,
 } from "lucide-react";
-import { apiUrl, type SessionView } from "./auth";
+import {
+  authenticatedFetch,
+  AuthenticationRequiredError,
+  getSession,
+  type SessionView,
+} from "./auth";
 import { AuthenticatedShell } from "./AuthenticatedShell";
 import { SignInScreen } from "./SignInScreen";
 
@@ -55,6 +60,8 @@ const labels: Record<string, string> = {
 
 export default function App() {
   const [session, setSession] = useState<SessionView | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [authNotice, setAuthNotice] = useState("");
   const [items, setItems] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -63,36 +70,69 @@ export default function App() {
   const [override, setOverride] = useState("");
   const [message, setMessage] = useState("");
 
+  const expireSession = useCallback(() => {
+    setSession(null);
+    setItems([]);
+    setSelected(null);
+    setAuthNotice("Your session expired. Sign in again to continue.");
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function restoreSession() {
+      try {
+        setSession(await getSession(controller.signal));
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
+        setAuthNotice(
+          error instanceof Error
+            ? error.message
+            : "The current session could not be checked.",
+        );
+      } finally {
+        if (!controller.signal.aborted) setCheckingSession(false);
+      }
+    }
+    void restoreSession();
+    return () => controller.abort();
+  }, []);
+
   useEffect(() => {
     if (!session) return;
-    let cancelled = false;
+    const controller = new AbortController();
     async function load() {
       setLoading(true);
       setLoadError("");
       try {
-        const response = await fetch(`${apiUrl}/api/applications`, {
-          credentials: "include",
+        const response = await authenticatedFetch("/api/applications", {
+          signal: controller.signal,
         });
         if (!response.ok)
           throw new Error("The application queue could not be loaded.");
         const data = await response.json();
-        if (!cancelled) setItems(data);
+        if (!controller.signal.aborted) setItems(data);
       } catch (error) {
-        if (!cancelled)
+        if (error instanceof AuthenticationRequiredError) {
+          expireSession();
+          return;
+        }
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
+        if (!controller.signal.aborted) {
           setLoadError(
             error instanceof Error
               ? error.message
               : "The application queue could not be loaded.",
           );
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     }
     void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [session]);
+    return () => controller.abort();
+  }, [expireSession, session]);
   const metrics = useMemo(
     () => ({
       submitted: items.length,
@@ -117,8 +157,8 @@ export default function App() {
       ...(action === "override" ? { overrideJustification: override } : {}),
     };
     try {
-      const response = await fetch(
-        `${apiUrl}/api/applications/${selected.id}/decisions`,
+      const response = await authenticatedFetch(
+        `/api/applications/${selected.id}/decisions`,
         {
           method: "POST",
           credentials: "include",
@@ -141,6 +181,10 @@ export default function App() {
         "Decision recorded in PostgreSQL and appended to the audit trail.",
       );
     } catch (error) {
+      if (error instanceof AuthenticationRequiredError) {
+        expireSession();
+        return;
+      }
       setMessage(
         error instanceof Error
           ? error.message
@@ -149,8 +193,25 @@ export default function App() {
     }
   }
 
+  if (checkingSession) {
+    return (
+      <main className="session-check" aria-live="polite">
+        <div className="brand-mark">LD</div>
+        <p>Checking your session…</p>
+      </main>
+    );
+  }
+
   if (!session) {
-    return <SignInScreen onSignedIn={setSession} />;
+    return (
+      <SignInScreen
+        notice={authNotice}
+        onSignedIn={(activeSession) => {
+          setSession(activeSession);
+          setAuthNotice("");
+        }}
+      />
+    );
   }
 
   return (
@@ -161,6 +222,7 @@ export default function App() {
         setSession(null);
         setItems([]);
         setSelected(null);
+        setAuthNotice("");
       }}
     >
       {loadError && (

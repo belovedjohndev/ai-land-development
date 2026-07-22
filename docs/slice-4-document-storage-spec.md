@@ -116,7 +116,7 @@ One row represents one logical application document.
 - Tenant-safe composite foreign keys to application, category, and users.
 - `current_version >= 1`.
 - Archive timestamp and actor must be both null or both present.
-- At most one non-archived logical document per tenant, application, and category.
+- Multiple logical documents may share a category; every document has its own independent current-version pointer and archive state.
 
 ### `document_versions`
 
@@ -145,7 +145,7 @@ Database triggers reject updates and deletes on `document_versions`. Replacement
 
 ## Existing metadata migration
 
-Migration `0003` renames the current flat table temporarily, creates the new model, seeds standard categories per existing tenant, maps known seeded filenames to checklist categories, migrates every legacy row as version 1 of a logical document, and then removes the temporary table.
+Migration `0003` renames the current flat table temporarily, creates the new model, seeds standard categories per existing tenant, maps known seeded filenames to checklist categories, migrates every legacy row into a logical document while preserving its existing version number, and then removes the temporary table.
 
 Legacy metadata keeps its prior object key, filename, MIME, size, and timestamp. Because prior Slice 2 seed objects were metadata-only, those objects may not exist in storage. The migration does not fabricate file contents. New uploads and replacements are fully managed by Slice 4.
 
@@ -211,9 +211,9 @@ Malformed identifiers or multipart input return `400`; unsupported content retur
 
 The object storage interface exposes only:
 
-- `putObject(key, bytes, contentType, contentDigest)`
+- `putObject({ key, content, contentType, sha256 })`
 - `deleteObject(key)`
-- `createDownloadUrl(key, filename, expiresInSeconds)`
+- `createSignedDownload(key, filename, expiresInSeconds)`
 
 The S3 adapter uses path-style access when configured for MinIO, server-side checksum metadata, explicit bucket configuration, and AWS SDK presigning. It never logs credentials, object keys, signed URLs, or file content.
 
@@ -237,11 +237,11 @@ Docker Compose runs:
 - MinIO console on `127.0.0.1:6901`; and
 - a one-shot MinIO client service that idempotently creates the private development bucket and disables anonymous access.
 
-Required server environment variables are documented in `.env.example`: endpoint, region, bucket, access key, secret key, path-style flag, download URL lifetime, and upload byte limit. No storage value is exposed through `VITE_` variables.
+Required server environment variables are documented in `.env.example`: endpoint, region, bucket, access key, secret key, path-style flag, and download URL lifetime. The upload limit is a domain and database invariant fixed at 10 MiB, not a runtime override. No storage value is exposed through `VITE_` variables.
 
 ## Acceptance criteria
 
-- Database constraints protect tenant ownership, unique active documents, version ordering, current-version references, idempotency, and immutable history.
+- Database constraints protect tenant ownership, positive and unique version numbers, current-version references, idempotency, and immutable history.
 - Domain tests cover every role/capability combination, file validation, filename normalization, and version increments.
 - API tests cover upload, replay, conflicting idempotency keys, replacement, history, signed download, archival, storage cleanup, role denial, and cross-tenant identifiers.
 - Local MinIO bucket initialization is repeatable and private.

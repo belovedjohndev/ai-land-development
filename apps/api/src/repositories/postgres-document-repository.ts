@@ -19,6 +19,7 @@ import {
   type DocumentWriteResult,
   type DownloadableDocumentVersion,
   type ReplaceDocumentInput,
+  type ReplacementTargetValidation,
   type StoredUpload,
 } from "../documents/document-repository.js";
 import type { AuthenticatedRequestContext } from "../types.js";
@@ -64,6 +65,26 @@ export class PostgresDocumentRepository implements DocumentRepository {
       )
       .limit(1);
     return category ? "valid" : "category_missing";
+  }
+
+  async validateReplacementTarget(
+    tenantId: string,
+    applicationId: string,
+    documentId: string,
+  ): Promise<ReplacementTargetValidation> {
+    const [document] = await this.db
+      .select({ archivedAt: documents.archivedAt })
+      .from(documents)
+      .where(
+        and(
+          eq(documents.tenantId, tenantId),
+          eq(documents.applicationId, applicationId),
+          eq(documents.id, documentId),
+        ),
+      )
+      .limit(1);
+    if (!document) return "document_missing";
+    return document.archivedAt ? "document_archived" : "valid";
   }
 
   async listDocuments(

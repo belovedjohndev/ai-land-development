@@ -11,8 +11,10 @@ import { DocumentService, DocumentServiceError } from "./document-service.js";
 const ApplicationParamsSchema = z.object({
   applicationId: z.string().uuid(),
 });
-const DocumentVersionParamsSchema = ApplicationParamsSchema.extend({
+const DocumentParamsSchema = ApplicationParamsSchema.extend({
   documentId: z.string().uuid(),
+});
+const DocumentVersionParamsSchema = DocumentParamsSchema.extend({
   version: z.coerce.number().int().positive(),
 });
 const IdempotencyHeaderSchema = z.object({
@@ -162,6 +164,53 @@ export function registerDocumentRoutes(
       }
     },
   );
+
+  app.post(
+    "/api/applications/:applicationId/documents/:documentId/versions",
+    async (request, reply) => {
+      const context = await options.requirePermission(
+        request,
+        reply,
+        "documents:upload",
+      );
+      if (!context) return;
+      const params = DocumentParamsSchema.safeParse(request.params);
+      const headers = IdempotencyHeaderSchema.safeParse(request.headers);
+      if (!params.success || !headers.success || !request.isMultipart()) {
+        return reply.code(400).send({ message: "Invalid upload request." });
+      }
+
+      try {
+        let file: { originalFilename: string; content: Buffer } | undefined;
+        for await (const part of request.parts()) {
+          if (part.type !== "file" || part.fieldname !== "file" || file) {
+            return reply.code(400).send({
+              message: "Exactly one file field is required.",
+            });
+          }
+          file = {
+            originalFilename: part.filename,
+            content: await part.toBuffer(),
+          };
+        }
+        if (!file) {
+          return reply.code(400).send({ message: "A file is required." });
+        }
+
+        const result = await options.service.replace({
+          context,
+          applicationId: params.data.applicationId,
+          documentId: params.data.documentId,
+          originalFilename: file.originalFilename,
+          content: file.content,
+          idempotencyKey: headers.data["idempotency-key"],
+        });
+        return reply.code(result.replayed ? 200 : 201).send(result.document);
+      } catch (error) {
+        return sendDocumentError(error, reply);
+      }
+    },
+  );
 }
 
 export function documentMultipartLimits() {
@@ -207,13 +256,15 @@ function sendDocumentError(error: unknown, reply: FastifyReply) {
         ? 415
         : error.code === "IDEMPOTENCY_CONFLICT"
           ? 409
-          : error.code === "STORAGE_UNAVAILABLE"
-            ? 502
-            : error.code === "APPLICATION_NOT_FOUND" ||
-                error.code === "CATEGORY_NOT_FOUND" ||
-                error.code === "DOCUMENT_NOT_FOUND"
-              ? 404
-              : 400;
+          : error.code === "DOCUMENT_ARCHIVED"
+            ? 409
+            : error.code === "STORAGE_UNAVAILABLE"
+              ? 502
+              : error.code === "APPLICATION_NOT_FOUND" ||
+                  error.code === "CATEGORY_NOT_FOUND" ||
+                  error.code === "DOCUMENT_NOT_FOUND"
+                ? 404
+                : 400;
   return reply
     .code(statusCode)
     .send({ message: error.message, code: error.code });

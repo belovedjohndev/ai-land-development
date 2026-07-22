@@ -91,6 +91,7 @@ async function createHarness(options: HarnessOptions = {}) {
   const documentRepository: DocumentRepository = {
     listCategories: vi.fn(async () => []),
     validateCreateTarget: vi.fn(async () => "valid" as const),
+    validateReplacementTarget: vi.fn(async () => "valid" as const),
     listDocuments: vi.fn(async () => []),
     findUploadByIdempotency: vi.fn(async () => null),
     createDocument: vi.fn(),

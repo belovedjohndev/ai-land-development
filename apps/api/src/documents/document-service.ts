@@ -40,10 +40,20 @@ export type DownloadDocumentResult = {
   expiresAt: string;
 };
 
+export type ReplaceDocumentCommand = {
+  context: AuthenticatedRequestContext;
+  applicationId: string;
+  documentId: string;
+  originalFilename: string;
+  content: Buffer;
+  idempotencyKey: string;
+};
+
 export type DocumentServiceErrorCode =
   | "APPLICATION_NOT_FOUND"
   | "CATEGORY_NOT_FOUND"
   | "DOCUMENT_NOT_FOUND"
+  | "DOCUMENT_ARCHIVED"
   | "UNSUPPORTED_MEDIA_TYPE"
   | "FILE_TOO_LARGE"
   | "EMPTY_FILE"
@@ -88,6 +98,7 @@ export class DocumentService {
     }
 
     const fingerprint = uploadFingerprint({
+      operation: "create",
       tenantId: command.context.tenantId,
       actorId: command.context.actorId,
       applicationId: command.applicationId,
@@ -131,6 +142,97 @@ export class DocumentService {
         context: command.context,
         applicationId: command.applicationId,
         categoryId: command.categoryId,
+        version: {
+          filename: file.filename,
+          objectKey,
+          mimeType: file.mimeType,
+          sizeBytes: command.content.byteLength,
+          sha256Digest: file.contentDigest,
+          idempotencyKey: command.idempotencyKey,
+          requestFingerprint: fingerprint,
+        },
+      });
+      if (!result.committed) await this.cleanup(objectKey);
+      return { document: result.document, replayed: !result.committed };
+    } catch (error) {
+      await this.cleanup(objectKey);
+      if (
+        error instanceof DocumentRepositoryError &&
+        error.code === "IDEMPOTENCY_CONFLICT"
+      ) {
+        throw new DocumentServiceError("IDEMPOTENCY_CONFLICT", error.message);
+      }
+      throw error;
+    }
+  }
+
+  async replace(
+    command: ReplaceDocumentCommand,
+  ): Promise<UploadDocumentResult> {
+    const file = await inspectFile(command.content, command.originalFilename);
+    const target = await this.documents.validateReplacementTarget(
+      command.context.tenantId,
+      command.applicationId,
+      command.documentId,
+    );
+    if (target === "document_missing") {
+      throw new DocumentServiceError(
+        "DOCUMENT_NOT_FOUND",
+        "Document not found.",
+      );
+    }
+    if (target === "document_archived") {
+      throw new DocumentServiceError(
+        "DOCUMENT_ARCHIVED",
+        "Archived documents cannot be replaced.",
+      );
+    }
+
+    const fingerprint = uploadFingerprint({
+      operation: "replace",
+      tenantId: command.context.tenantId,
+      actorId: command.context.actorId,
+      applicationId: command.applicationId,
+      targetId: command.documentId,
+      filename: file.filename,
+      mimeType: file.mimeType,
+      sizeBytes: command.content.byteLength,
+      contentDigest: file.contentDigest,
+    });
+    const replay = await this.documents.findUploadByIdempotency(
+      command.context,
+      command.idempotencyKey,
+    );
+    if (replay) {
+      if (replay.fingerprint !== fingerprint) {
+        throw new DocumentServiceError(
+          "IDEMPOTENCY_CONFLICT",
+          "The idempotency key has already been used for another upload.",
+        );
+      }
+      return { document: replay.document, replayed: true };
+    }
+
+    const objectKey = objectKeyFor(command);
+    try {
+      await this.storage.putObject({
+        key: objectKey,
+        content: command.content,
+        contentType: file.mimeType,
+        sha256: file.contentDigest,
+      });
+    } catch {
+      throw new DocumentServiceError(
+        "STORAGE_UNAVAILABLE",
+        "Document storage is temporarily unavailable.",
+      );
+    }
+
+    try {
+      const result = await this.documents.replaceDocument({
+        context: command.context,
+        applicationId: command.applicationId,
+        documentId: command.documentId,
         version: {
           filename: file.filename,
           objectKey,
@@ -248,6 +350,7 @@ async function inspectFile(
 }
 
 function uploadFingerprint(input: {
+  operation: "create" | "replace";
   tenantId: string;
   actorId: string;
   applicationId: string;
@@ -260,6 +363,7 @@ function uploadFingerprint(input: {
   return createHash("sha256")
     .update(
       JSON.stringify([
+        input.operation,
         input.tenantId,
         input.actorId,
         input.applicationId,
@@ -274,6 +378,9 @@ function uploadFingerprint(input: {
     .digest("hex");
 }
 
-function objectKeyFor(command: UploadDocumentCommand): string {
+function objectKeyFor(command: {
+  context: AuthenticatedRequestContext;
+  applicationId: string;
+}): string {
   return `tenants/${command.context.tenantId}/applications/${command.applicationId}/documents/${randomUUID()}`;
 }

@@ -13,6 +13,30 @@ export const applicationStatuses = [
 export const ApplicationStatusSchema = z.enum(applicationStatuses);
 export type ApplicationStatus = z.infer<typeof ApplicationStatusSchema>;
 
+export const userRoles = ["admin", "reviewer", "viewer"] as const;
+export const UserRoleSchema = z.enum(userRoles);
+export type UserRole = z.infer<typeof UserRoleSchema>;
+
+export const applicationPermissions = [
+  "applications:read",
+  "decisions:submit",
+] as const;
+export const ApplicationPermissionSchema = z.enum(applicationPermissions);
+export type ApplicationPermission = z.infer<typeof ApplicationPermissionSchema>;
+
+const rolePermissions: Record<UserRole, ReadonlySet<ApplicationPermission>> = {
+  admin: new Set(applicationPermissions),
+  reviewer: new Set(applicationPermissions),
+  viewer: new Set(["applications:read"]),
+};
+
+export function roleCan(
+  role: UserRole,
+  permission: ApplicationPermission,
+): boolean {
+  return rolePermissions[role].has(permission);
+}
+
 export const decisionActions = [
   "approve",
   "request_revision",

@@ -36,3 +36,14 @@ export async function signIn(
 
   return (await response.json()) as SessionView;
 }
+
+export async function signOut(): Promise<void> {
+  const response = await fetch(`${apiUrl}/api/auth/sign-out`, {
+    method: "POST",
+    credentials: "include",
+  });
+
+  if (!response.ok) {
+    throw new Error("Sign-out failed. Please try again.");
+  }
+}

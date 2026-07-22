@@ -176,7 +176,7 @@ textarea {
   color: white;
 }
 .policy-note {
-  margin-top: auto;
+  margin-top: 12px;
   border: 1px solid #2d5a41;
   background: #163a27;
   border-radius: 14px;
@@ -193,6 +193,63 @@ textarea {
   color: #a9c1b2;
   margin-top: 4px;
   line-height: 1.45;
+}
+.session-panel {
+  margin-top: auto;
+  padding: 13px;
+  border: 1px solid #2d5a41;
+  border-radius: 14px;
+  background: #0d291b;
+}
+.session-panel strong,
+.session-panel span,
+.session-panel small {
+  display: block;
+}
+.session-panel strong {
+  color: #fff;
+  font-size: 13px;
+}
+.session-panel span {
+  margin-top: 3px;
+  color: #a9c1b2;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.session-panel small {
+  width: fit-content;
+  margin-top: 8px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: #1d6740;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+.session-panel button {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  margin-top: 11px;
+  padding: 8px 10px;
+  border: 1px solid #3c684f;
+  border-radius: 9px;
+  background: transparent;
+  color: #dce9e1;
+  cursor: pointer;
+}
+.session-panel button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.session-error {
+  margin: 8px 0 0;
+  color: #ffd4cf;
+  font-size: 11px;
+  line-height: 1.4;
 }
 .content {
   padding: 34px;
@@ -593,6 +650,25 @@ td small {
 }
 .decision {
   padding-bottom: 17px;
+}
+.viewer-notice {
+  display: flex;
+  gap: 12px;
+  padding: 18px;
+}
+.viewer-notice svg {
+  flex: 0 0 auto;
+  color: #176b3a;
+}
+.viewer-notice h2 {
+  margin: 0 0 5px;
+  font-size: 15px;
+}
+.viewer-notice p {
+  margin: 0;
+  color: #66746e;
+  font-size: 12px;
+  line-height: 1.5;
 }
 .decision label {
   display: block;

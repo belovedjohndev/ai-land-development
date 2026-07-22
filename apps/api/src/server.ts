@@ -10,8 +10,6 @@ import { Argon2idPasswordHasher } from "./security/argon2id-password-hasher.js";
 config({ path: fileURLToPath(new URL("../../../.env", import.meta.url)) });
 
 const databaseUrl = process.env.DATABASE_URL;
-const tenantId = process.env.DEV_TENANT_ID;
-const actorId = process.env.DEV_REVIEWER_ID;
 const sessionTtlHours = z.coerce
   .number()
   .int()
@@ -20,19 +18,10 @@ const sessionTtlHours = z.coerce
   .parse(process.env.SESSION_TTL_HOURS ?? "12");
 
 if (!databaseUrl) throw new Error("DATABASE_URL is required.");
-if (!tenantId)
-  throw new Error(
-    "DEV_TENANT_ID is required until authentication is implemented.",
-  );
-if (!actorId)
-  throw new Error(
-    "DEV_REVIEWER_ID is required until authentication is implemented.",
-  );
 
 const { db, client } = createDatabase(databaseUrl);
 const app = await buildApp({
   repository: new PostgresApplicationRepository(db),
-  requestContext: { tenantId, actorId },
   sessionRepository: new PostgresSessionRepository(db),
   passwordHasher: new Argon2idPasswordHasher(),
   sessionTtlMs: sessionTtlHours * 60 * 60 * 1_000,

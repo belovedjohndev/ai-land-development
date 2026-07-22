@@ -28,6 +28,16 @@ const application: ApplicationView = {
   audit: [],
 };
 
+const authenticatedSession = {
+  userId: context.actorId,
+  tenantId: context.tenantId,
+  tenantName: "Regional Land Development Authority",
+  email: "maria.santos@example.test",
+  name: "Maria Santos",
+  role: "reviewer" as const,
+  expiresAt: new Date("2026-07-23T00:00:00.000Z"),
+};
+
 const passwordHasher: PasswordHasher = {
   hash: vi.fn(async () => "unused"),
   verify: vi.fn(async () => false),
@@ -39,7 +49,7 @@ const sessionRepository: SessionRepository = {
     ...user,
     expiresAt,
   })),
-  resolveSession: vi.fn(async () => null),
+  resolveSession: vi.fn(async () => authenticatedSession),
   revokeSession: vi.fn(async () => undefined),
   recordFailedSignIn: vi.fn(async () => undefined),
 };
@@ -68,7 +78,6 @@ describe("API", () => {
     const repository = createRepository();
     const app = await buildApp({
       repository,
-      requestContext: context,
       ...authenticationOptions,
       logger: false,
     });
@@ -84,13 +93,13 @@ describe("API", () => {
     const repository = createRepository();
     const app = await buildApp({
       repository,
-      requestContext: context,
       ...authenticationOptions,
       logger: false,
     });
     const response = await app.inject({
       method: "GET",
       url: "/api/applications",
+      headers: { cookie: "ald_session=test-session-token" },
     });
 
     expect(response.statusCode).toBe(200);
@@ -103,13 +112,13 @@ describe("API", () => {
     const repository = createRepository();
     const app = await buildApp({
       repository,
-      requestContext: context,
       ...authenticationOptions,
       logger: false,
     });
     const response = await app.inject({
       method: "POST",
       url: `/api/applications/${application.id}/decisions`,
+      headers: { cookie: "ald_session=test-session-token" },
       payload: {
         action: "override",
         note: "Reviewer checked the submitted evidence.",
@@ -125,13 +134,13 @@ describe("API", () => {
     const repository = createRepository();
     const app = await buildApp({
       repository,
-      requestContext: context,
       ...authenticationOptions,
       logger: false,
     });
     const response = await app.inject({
       method: "POST",
       url: `/api/applications/${application.id}/decisions`,
+      headers: { cookie: "ald_session=test-session-token" },
       payload: {
         action: "approve",
         reviewerId: "99999999-9999-4999-8999-999999999999",
@@ -141,7 +150,7 @@ describe("API", () => {
 
     expect(response.statusCode).toBe(201);
     expect(repository.recordDecision).toHaveBeenCalledWith(
-      context,
+      expect.objectContaining(context),
       application.id,
       expect.objectContaining({ action: "approve" }),
     );

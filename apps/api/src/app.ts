@@ -1,14 +1,19 @@
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
-import { ReviewDecisionSchema } from "@ald/domain";
-import Fastify from "fastify";
+import {
+  ReviewDecisionSchema,
+  roleCan,
+  type ApplicationPermission,
+} from "@ald/domain";
+import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import { z } from "zod";
+import { AuthenticatedRequestContextResolver } from "./authentication/authenticated-request-context.js";
 import { AuthenticationService } from "./authentication/authentication-service.js";
 import { RepositoryError } from "./errors.js";
 import type {
   ApplicationRepository,
+  AuthenticatedRequestContext,
   PasswordHasher,
-  RequestContext,
   SessionRepository,
 } from "./types.js";
 
@@ -20,7 +25,6 @@ const SignInSchema = z.object({
 
 type BuildAppOptions = {
   repository: ApplicationRepository;
-  requestContext: RequestContext;
   sessionRepository: SessionRepository;
   passwordHasher: PasswordHasher;
   sessionTtlMs: number;
@@ -30,7 +34,6 @@ type BuildAppOptions = {
 
 export async function buildApp({
   repository,
-  requestContext,
   sessionRepository,
   passwordHasher,
   sessionTtlMs,
@@ -42,6 +45,9 @@ export async function buildApp({
     sessionRepository,
     passwordHasher,
     sessionTtlMs,
+  );
+  const requestContextResolver = new AuthenticatedRequestContextResolver(
+    authentication,
   );
 
   await app.register(cors, {
@@ -108,13 +114,44 @@ export async function buildApp({
     return reply.code(204).send();
   });
 
-  app.get("/api/applications", async () => {
-    return repository.listApplications(requestContext.tenantId);
+  async function requirePermission(
+    request: FastifyRequest,
+    reply: FastifyReply,
+    permission: ApplicationPermission,
+  ): Promise<AuthenticatedRequestContext | null> {
+    const context = await requestContextResolver.resolve(
+      request.cookies[sessionCookieName],
+    );
+    if (!context) {
+      await reply.code(401).send({ message: "Authentication required." });
+      return null;
+    }
+    if (!roleCan(context.role, permission)) {
+      await reply.code(403).send({ message: "Permission denied." });
+      return null;
+    }
+    return context;
+  }
+
+  app.get("/api/applications", async (request, reply) => {
+    const context = await requirePermission(
+      request,
+      reply,
+      "applications:read",
+    );
+    if (!context) return;
+    return repository.listApplications(context.tenantId);
   });
 
   app.get("/api/applications/:id", async (request, reply) => {
+    const context = await requirePermission(
+      request,
+      reply,
+      "applications:read",
+    );
+    if (!context) return;
     const item = await repository.getApplication(
-      requestContext.tenantId,
+      context.tenantId,
       (request.params as { id: string }).id,
     );
     if (!item)
@@ -123,6 +160,9 @@ export async function buildApp({
   });
 
   app.post("/api/applications/:id/decisions", async (request, reply) => {
+    const context = await requirePermission(request, reply, "decisions:submit");
+    if (!context) return;
+
     const parsed = ReviewDecisionSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -133,7 +173,7 @@ export async function buildApp({
 
     try {
       const item = await repository.recordDecision(
-        requestContext,
+        context,
         (request.params as { id: string }).id,
         parsed.data,
       );

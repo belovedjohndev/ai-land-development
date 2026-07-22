@@ -11,6 +11,8 @@ import {
   Scale,
   ShieldCheck,
 } from "lucide-react";
+import { apiUrl, type SessionView } from "./auth";
+import { SignInScreen } from "./SignInScreen";
 
 type Finding = {
   id: string;
@@ -42,7 +44,6 @@ type Application = {
   audit: Audit[];
 };
 
-const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 const labels: Record<string, string> = {
   under_review: "Under Review",
   ai_prescreened: "AI Pre-Screened",
@@ -54,6 +55,7 @@ const labels: Record<string, string> = {
 };
 
 export default function App() {
+  const [session, setSession] = useState<SessionView | null>(null);
   const [items, setItems] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -63,10 +65,15 @@ export default function App() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
+    if (!session) return;
     let cancelled = false;
     async function load() {
+      setLoading(true);
+      setLoadError("");
       try {
-        const response = await fetch(`${apiUrl}/api/applications`);
+        const response = await fetch(`${apiUrl}/api/applications`, {
+          credentials: "include",
+        });
         if (!response.ok)
           throw new Error("The application queue could not be loaded.");
         const data = await response.json();
@@ -86,7 +93,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [session]);
   const metrics = useMemo(
     () => ({
       submitted: items.length,
@@ -115,6 +122,7 @@ export default function App() {
         `${apiUrl}/api/applications/${selected.id}/decisions`,
         {
           method: "POST",
+          credentials: "include",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload),
         },
@@ -140,6 +148,10 @@ export default function App() {
           : "Decision failed. Start the API or verify the form.",
       );
     }
+  }
+
+  if (!session) {
+    return <SignInScreen onSignedIn={setSession} />;
   }
 
   return (

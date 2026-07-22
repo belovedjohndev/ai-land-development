@@ -16,15 +16,109 @@
 }
 body {
   margin: 0;
-  min-width: 1180px;
+  min-width: 320px;
 }
 button,
+input,
 textarea {
   font: inherit;
+}
+.sign-in-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background:
+    radial-gradient(
+      circle at top left,
+      rgba(38, 117, 73, 0.18),
+      transparent 34%
+    ),
+    #eef3f0;
+}
+.sign-in-card {
+  width: min(100%, 430px);
+  padding: 34px;
+  border: 1px solid #d4dfd9;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(20, 42, 32, 0.12);
+}
+.sign-in-brand {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 22px;
+  border-radius: 14px;
+  background: #176b3a;
+  color: #fff;
+  font-weight: 900;
+}
+.sign-in-card h1 {
+  margin: 7px 0 9px;
+  color: #10251c;
+  font-size: 29px;
+  letter-spacing: -0.035em;
+}
+.sign-in-card > p {
+  margin: 0 0 24px;
+  color: #66746e;
+  line-height: 1.55;
+}
+.sign-in-card form {
+  display: grid;
+  gap: 8px;
+}
+.sign-in-card label {
+  margin-top: 8px;
+  color: #34483f;
+  font-size: 12px;
+  font-weight: 800;
+}
+.sign-in-card input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #cdd9d3;
+  border-radius: 10px;
+  color: #17231f;
+  background: #fff;
+}
+.sign-in-card input:focus {
+  border-color: #176b3a;
+  outline: 3px solid rgba(23, 107, 58, 0.14);
+}
+.sign-in-submit {
+  width: 100%;
+  margin-top: 13px;
+}
+.sign-in-submit:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+.sign-in-error {
+  margin: 7px 0 0;
+  color: #a4342e;
+  font-size: 12px;
+}
+.sign-in-policy {
+  display: flex;
+  gap: 9px;
+  margin-top: 23px;
+  padding-top: 18px;
+  border-top: 1px solid #e3ebe7;
+  color: #62716a;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.sign-in-policy svg {
+  flex: 0 0 auto;
+  color: #176b3a;
 }
 .shell {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
+  min-width: 1180px;
   min-height: 100vh;
 }
 .sidebar {
@@ -592,7 +686,7 @@ td small {
   padding: 20px;
 }
 @media (max-width: 1250px) {
-  body {
+  .shell {
     min-width: 1000px;
   }
   .shell {

@@ -1,5 +1,10 @@
 import type { ApplicationStatus, ReviewDecision } from "@ald/domain";
 
+export interface PasswordHasher {
+  hash(password: string): Promise<string>;
+  verify(passwordHash: string, password: string): Promise<boolean>;
+}
+
 export type FindingView = {
   id: string;
   source: "ai" | "deterministic_rule" | "reviewer";

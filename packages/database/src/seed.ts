@@ -1,3 +1,5 @@
+import { argon2id, hash } from "argon2";
+import { and, eq } from "drizzle-orm";
 import { createDatabase } from "./index.js";
 import { requireDatabaseUrl } from "./env.js";
 import {
@@ -12,6 +14,21 @@ import {
 const tenantId = "00000000-0000-4000-8000-000000000001";
 const unusablePasswordHash =
   "$argon2id$v=19$m=65536,t=3,p=1$c2xpY2UtMy11bnVzYWJsZQ$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const devSeedPassword = process.env.DEV_SEED_PASSWORD;
+
+if (devSeedPassword && devSeedPassword.length < 12) {
+  throw new Error("DEV_SEED_PASSWORD must contain at least 12 characters.");
+}
+
+const devSeedPasswordHash = devSeedPassword
+  ? await hash(devSeedPassword, {
+      type: argon2id,
+      memoryCost: 65_536,
+      timeCost: 3,
+      parallelism: 1,
+      hashLength: 32,
+    })
+  : null;
 const reviewerIds = {
   maria: "11111111-1111-4111-8111-111111111111",
   daniel: "22222222-2222-4222-8222-222222222222",
@@ -74,6 +91,15 @@ try {
         },
       ])
       .onConflictDoNothing();
+
+    if (devSeedPasswordHash) {
+      await transaction
+        .update(users)
+        .set({ passwordHash: devSeedPasswordHash })
+        .where(
+          and(eq(users.tenantId, tenantId), eq(users.id, reviewerIds.maria)),
+        );
+    }
 
     await transaction
       .insert(applications)
@@ -284,8 +310,6 @@ try {
   });
 
   console.log("Seed complete.");
-  console.log(`DEV_TENANT_ID=${tenantId}`);
-  console.log(`DEV_REVIEWER_ID=${reviewerIds.maria}`);
 } finally {
   await client.end();
 }

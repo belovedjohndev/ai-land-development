@@ -76,6 +76,55 @@ export function uploadDocument(
   );
 }
 
+export function replaceDocument(
+  applicationId: string,
+  documentId: string,
+  file: File,
+  onProgress: (percent: number) => void,
+): Promise<ApplicationDocument> {
+  const body = new FormData();
+  body.append("file", file);
+  return sendMultipart(
+    `/api/applications/${applicationId}/documents/${documentId}/versions`,
+    body,
+    onProgress,
+  );
+}
+
+export async function archiveDocument(
+  applicationId: string,
+  documentId: string,
+): Promise<void> {
+  const response = await authenticatedFetch(
+    `/api/applications/${applicationId}/documents/${documentId}`,
+    { method: "DELETE" },
+  );
+  if (!response.ok) {
+    const payload = parseJson(await response.text());
+    throw new Error(
+      payload && typeof payload.message === "string"
+        ? payload.message
+        : "Document archival failed.",
+    );
+  }
+}
+
+export function validateDocumentFile(file: File | null): string | null {
+  if (!file) return "Choose a file.";
+  if (file.size === 0) return "The selected file is empty.";
+  if (file.size > maxDocumentSizeBytes) {
+    return "The selected file exceeds the 10 MiB limit.";
+  }
+  if (
+    !supportedDocumentTypes.includes(
+      file.type as (typeof supportedDocumentTypes)[number],
+    )
+  ) {
+    return "Only PDF, JPEG, and PNG files are supported.";
+  }
+  return null;
+}
+
 function sendMultipart(
   path: string,
   body: FormData,

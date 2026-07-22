@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { FileText } from "lucide-react";
 import { AuthenticationRequiredError, type UserRole } from "./auth";
 import {
   loadDocumentCategories,
@@ -8,6 +7,7 @@ import {
   type DocumentCategory,
 } from "./documents";
 import { DocumentUploadPanel } from "./DocumentUploadPanel";
+import { DocumentVersionHistory } from "./DocumentVersionHistory";
 
 type DocumentManagerProps = {
   applicationId: string;
@@ -100,22 +100,20 @@ export function DocumentManager({
         </p>
       ) : documents.length ? (
         <div className="document-list">
-          {documents.map((document) => {
-            const current = document.versions.find(
-              (version) => version.version === document.currentVersion,
-            );
-            return (
-              <article className="doc" key={document.id}>
-                <FileText aria-hidden="true" />
-                <div>
-                  <strong>{current?.filename ?? document.category.name}</strong>
-                  <span>
-                    {document.category.name} · Version {document.currentVersion}
-                  </span>
-                </div>
-              </article>
-            );
-          })}
+          {documents.map((document) => (
+            <DocumentVersionHistory
+              key={document.id}
+              document={document}
+              canManage={canUpload}
+              onArchived={(documentId) =>
+                setDocuments((current) =>
+                  current.filter((item) => item.id !== documentId),
+                )
+              }
+              onAuthenticationRequired={onAuthenticationRequired}
+              onUpdated={updateDocument}
+            />
+          ))}
         </div>
       ) : (
         <p className="document-state">No active documents.</p>

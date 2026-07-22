@@ -2,9 +2,8 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Upload } from "lucide-react";
 import { AuthenticationRequiredError } from "./auth";
 import {
-  maxDocumentSizeBytes,
-  supportedDocumentTypes,
   uploadDocument,
+  validateDocumentFile,
   type ApplicationDocument,
   type DocumentCategory,
 } from "./documents";
@@ -41,20 +40,9 @@ export function DocumentUploadPanel({
       setError("Choose a category and a file.");
       return;
     }
-    if (file.size === 0) {
-      setError("The selected file is empty.");
-      return;
-    }
-    if (file.size > maxDocumentSizeBytes) {
-      setError("The selected file exceeds the 10 MiB limit.");
-      return;
-    }
-    if (
-      !supportedDocumentTypes.includes(
-        file.type as (typeof supportedDocumentTypes)[number],
-      )
-    ) {
-      setError("Only PDF, JPEG, and PNG files are supported.");
+    const validationError = validateDocumentFile(file);
+    if (validationError) {
+      setError(validationError);
       return;
     }
 

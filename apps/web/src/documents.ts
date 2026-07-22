@@ -109,6 +109,33 @@ export async function archiveDocument(
   }
 }
 
+export async function requestDocumentDownload(
+  applicationId: string,
+  documentId: string,
+  version: number,
+): Promise<{ url: string; expiresAt: string }> {
+  const response = await authenticatedFetch(
+    `/api/applications/${applicationId}/documents/${documentId}/versions/${version}/download`,
+    { method: "POST" },
+  );
+  const payload = parseJson(await response.text());
+  if (!response.ok) {
+    throw new Error(
+      payload && typeof payload.message === "string"
+        ? payload.message
+        : "Document download failed.",
+    );
+  }
+  if (
+    !payload ||
+    typeof payload.url !== "string" ||
+    typeof payload.expiresAt !== "string"
+  ) {
+    throw new Error("The API returned an invalid download response.");
+  }
+  return { url: payload.url, expiresAt: payload.expiresAt };
+}
+
 export function validateDocumentFile(file: File | null): string | null {
   if (!file) return "Choose a file.";
   if (file.size === 0) return "The selected file is empty.";

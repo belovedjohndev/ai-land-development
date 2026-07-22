@@ -871,7 +871,7 @@ td small {
   overflow-wrap: anywhere;
   font-size: 12px;
 }
-.version-list div > span,
+.version-list li > div:first-child > span,
 .version-list time {
   margin-top: 3px;
   color: #74817a;
@@ -891,6 +891,41 @@ td small {
 .past-version {
   background: #f0f3f1;
   color: #68766f;
+}
+.version-actions {
+  flex: 0 0 auto;
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+}
+.download-control {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+.download-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  border: 1px solid #d6e0db;
+  border-radius: 7px;
+  background: #fff;
+  color: #21352c;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.download-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.download-error {
+  max-width: 150px;
+  color: #a4342e;
+  font-size: 9px;
+  line-height: 1.35;
+  text-align: right;
 }
 .replacement-form {
   display: grid;

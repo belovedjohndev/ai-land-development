@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Archive, FileText, History, RefreshCw } from "lucide-react";
 import { AuthenticationRequiredError } from "./auth";
+import { DocumentDownloadButton } from "./DocumentDownloadButton";
 import {
   archiveDocument,
   replaceDocument,
@@ -72,6 +73,7 @@ export function DocumentVersionHistory({
     ) {
       return;
     }
+    setProgress(0);
     setBusy(true);
     setError("");
     try {
@@ -128,13 +130,22 @@ export function DocumentVersionHistory({
                 {new Date(version.createdAt).toLocaleString()}
               </time>
             </div>
-            {version.version === document.currentVersion ? (
-              <span className="current-version">
-                Current · v{version.version}
-              </span>
-            ) : (
-              <span className="past-version">v{version.version}</span>
-            )}
+            <div className="version-actions">
+              {version.version === document.currentVersion ? (
+                <span className="current-version">
+                  Current · v{version.version}
+                </span>
+              ) : (
+                <span className="past-version">v{version.version}</span>
+              )}
+              <DocumentDownloadButton
+                applicationId={document.applicationId}
+                documentId={document.id}
+                filename={version.filename}
+                version={version.version}
+                onAuthenticationRequired={onAuthenticationRequired}
+              />
+            </div>
           </li>
         ))}
       </ol>

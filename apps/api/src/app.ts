@@ -55,6 +55,13 @@ export async function buildApp({
   logger = true,
 }: BuildAppOptions) {
   const app = Fastify({ logger });
+  app.setErrorHandler((error, request, reply) => {
+    request.log.error(
+      { errorName: error instanceof Error ? error.name : "UnknownError" },
+      "Unhandled request processing failure.",
+    );
+    return reply.code(500).send({ message: "Internal server error." });
+  });
   const authentication = new AuthenticationService(
     sessionRepository,
     passwordHasher,

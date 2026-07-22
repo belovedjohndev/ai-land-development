@@ -1,8 +1,42 @@
-import type { ApplicationStatus, ReviewDecision } from "@ald/domain";
+import type { ApplicationStatus, ReviewDecision, UserRole } from "@ald/domain";
 
 export interface PasswordHasher {
   hash(password: string): Promise<string>;
   verify(passwordHash: string, password: string): Promise<boolean>;
+}
+
+export type AuthenticatedUser = {
+  userId: string;
+  tenantId: string;
+  tenantName: string;
+  email: string;
+  name: string;
+  role: UserRole;
+};
+
+export type PasswordCredential = AuthenticatedUser & {
+  passwordHash: string;
+};
+
+export type AuthenticatedSession = AuthenticatedUser & {
+  expiresAt: Date;
+};
+
+export interface SessionRepository {
+  findCredentialByEmail(
+    normalizedEmail: string,
+  ): Promise<PasswordCredential | null>;
+  createSession(
+    user: AuthenticatedUser,
+    tokenDigest: string,
+    expiresAt: Date,
+  ): Promise<AuthenticatedSession>;
+  resolveSession(
+    tokenDigest: string,
+    now: Date,
+  ): Promise<AuthenticatedSession | null>;
+  revokeSession(tokenDigest: string, now: Date): Promise<void>;
+  recordFailedSignIn(subjectDigest: string): Promise<void>;
 }
 
 export type FindingView = {
